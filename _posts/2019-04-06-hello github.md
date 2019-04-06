@@ -2,8 +2,8 @@
 layout: post
 title:  "Hello Github"
 date:   2019-04-06 14:00:01 +0800
-categories: Hello New World
-tag: Hello New World
+categories: Hello
+tag: Hello
 ---
 
 * content
