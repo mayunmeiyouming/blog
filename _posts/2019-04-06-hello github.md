@@ -3,7 +3,7 @@ layout: post
 title:  "Hello Markdown"
 date:   2019-04-06 14:00:01 +0800
 categories: markdown
-tag: markdown
+tag: markdown语法
 ---
 
 * content
@@ -56,6 +56,217 @@ tag: markdown
 
     ######六级标题
 
+### 三、代码标注
+
+用tab键开始的一行将被视为代码块
+
+![]({{ '/styles/images/2019-04-06-hello-github/02.png' | prepend: site.baseurl }})
+
+    <php>
+        echo “hello world";
+    </php>
+
+单行代码使用一个反引号可以标注代码也可以高亮
+
+![]({{ '/styles/images/2019-04-06-hello-github/03.png' | prepend: site.baseurl }})
+
+`<php>echo “hello world";</php>`
+
+多行代码使用三个反引号将代码包起来，且反引号需单独一行
+
+![]({{ '/styles/images/2019-04-06-hello-github/04.png' | prepend: site.baseurl }})
+
+```
+<php>
+    echo “hello world";
+</php>
+```
+
+### 四、分割线
+
+可以在一行中用三个以上的星号、减号、底线来建立一个分隔线，同时需要在分隔线的上面空一行
+
+    ***
+
+    ___
+
+    ---
+
+如果分割线上方没有空一行，则上方的文字将被解析为标题
+
+实例：
+
+![]({{ '/styles/images/2019-04-06-hello-github/05.png' | prepend: site.baseurl }})
+
+效果：
+
+![]({{ '/styles/images/2019-04-06-hello-github/06.png' | prepend: site.baseurl}})
+
+
+### 五、超链接
+
+---
+
+#### 第一种超链写法
+
+语法：
+
+![]({{ '/styles/images/2019-04-06-hello-github/07.png' | prepend: site.baseurl }})
+
+注：title的作用就是，当鼠标移动到超链上面，会出现提示
+
+实例：
+
+`[blog](https://mayunmeiyouming.github.io/blog '我的博客')`
+
+效果：
+
+![]({{ '/styles/images/2019-04-06-hello-github/08.png' | prepend: site.baseurl }})
+
+---
+
+#### 第二种超链写法
+
+语法：
+
+![]({{ '/styles/images/2019-04-06-hello-github/09.png' | prepend: site.baseurl }})
+
+实例：
+
+```
+[blog][1]
+
+[1]: http://example.com/ “title”
+```
+
+效果：
+
+![]({{ '/styles/images/2019-04-06-hello-github/10.png' | prepend: site.baseurl }})
+
+---
+
+#### 第三种超链写法
+
+语法：
+
+在文中直接引用链接，直接使用尖括号，把链接加入到尖括号中就可以实现
+
+实例：
+
+`<http://example.com/>`
+
+效果：
+
+![]({{ '/styles/images/2019-04-06-hello-github/11.png' | prepend: site.baseurl }})
+
+### 六、图片
+
+语法：
+
+`![图片下方的文字](链接 '提示（当鼠标移到图片的位置时，会出现）')`
+
+实例：
+
+`![blog]({{ '/styles/images/2019-04-06-hello-github/12.png' | prepend: site.baseurl }} '你好')`
+
+效果：
+
+![]({{ '/styles/images/2019-04-06-hello-github/12.png' | prepend: site.baseurl }})
+
+### 第七、列表
+
+---
+
+#### 1.无序列表
+
+语法：
+
+无序列表用 - + * 任何一种都可以
+
+注：符号和内容之间要有空格
+
+实例：
+
+```
+- 你好
+
++ 我好
+
+* 大家好
+```
+
+效果：
+
+![]({{ '/styles/images/2019-04-06-hello-github/13.png' | prepend: site.baseurl }})
+
+---
+
+#### 2.有序列表
+
+语法：
+
+数字加点
+
+实例：
+
+![]({{ '/styles/images/2019-04-06-hello-github/14.png' | prepend: site.baseurl }})
+
+效果：
+
+![]({{ '/styles/images/2019-04-06-hello-github/15.png' | prepend: site.baseurl }})
+
+### 第八、表格
+
+语法：
+```
+表头|表头|表头
+---|--:|:--:
+内容|内容|内容
+内容|内容|内容
+
+第二行分割表头和内容。
+- 有一个就行，为了对齐，多加了几个
+文字默认居左
+-两边加：表示文字居中
+-右边加：表示文字居右
+注：原生的语法两边都要用 | 包起来，但在jekyll中可以省略
+```
+
+实例：
+
+```
+你|我|它
+--|:--:|--:
+fesf|fsef|sfes
+sefheu|fjsef|fse
+```
+
+效果：
+
+你|我|它
+--|:--:|--:
+fesf|fsef|sfes
+sefheu|fjsef|fse
+
+### 第九、引用
+
+语法：
+
+`>你的引用`
+
+实例：
+
+```
+>你好
+>>你好
+>>>你好
+```
+
+效果：
+
+>你好
+>>你好
+>>>你好
 
 [jekyll]:      http://jekyllrb.com
 [jekyll-gh]:   https://github.com/jekyll/jekyll
