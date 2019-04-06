@@ -1,17 +1,22 @@
 ---
 layout: post
-title:  "Hello Github"
+title:  "Hello Jekyll"
 date:   2019-04-06 14:00:01 +0800
 categories: Hello
-tag: Hello
+tag: jekyll
 ---
 
 * content
 {:toc}
 
 
-First POST build by Jekyll.
+转义字符和其他语言一样使用  \
 
+*倾斜的文字（在文字两边加上一个\*）*
+
+**加粗的文字（在文字两边加上两个\*)**
+
+***斜体加粗的文字（在文字两边加上三个\*)***
 
 诫子书				{#zhugeliang}
 ------------------------
