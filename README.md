@@ -1,3 +1,5 @@
-# LessOrMore
+# blog更新记录
+
+2019-04-06 更新第一篇blog
 
 
