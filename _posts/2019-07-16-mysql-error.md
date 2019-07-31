@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "linux环境下安装Mysql,以及mysql运程连接"
-date:   2019-06-30 16:01:01 +0800
+date:   2019-07-16 16:01:01 +0800
 categories: mysql
 tag: linux
 ---
