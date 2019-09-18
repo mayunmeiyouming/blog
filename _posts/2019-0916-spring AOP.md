@@ -1,0 +1,258 @@
+---
+layout: post
+title:  "Spring AOP"
+date:   2019-09-16 22:11:01 +0800
+categories: AOP
+tag: Spring
+---
+
+* content
+{:toc}
+
+### Spring 的核心包
+
+`spring-beans spring-context spring-core spring-expression`
+
+### Proxy 代理
+
+```
+public static hwhw createProxyTest() {
+    final ProxyTest proxyTest = new ProxyTest();
+
+    //hwhw是接口,必须使用接口
+    hwhw proxyT = (hwhw) Proxy.newProxyInstance(
+                ProxyFactory.class.getClassLoader(),
+                proxyTest.getClass().getInterfaces(),
+                new InvocationHandler() {
+                    @Override
+                    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                        Object obj = method.invoke(proxyTest, args);
+                        return obj;
+                    }
+                }
+    );
+
+    return proxyT;
+}
+```
+
+### cglib代理
+
+cglib可以没有接口
+
+```
+public static ProxyClass2 createProxyClass() {
+    final ProxyClass2 proxyClass2 = new ProxyClass2();
+
+    Enhancer enhancer = new Enhancer();
+    enhancer.setSuperclass(proxyClass2.getClass());
+    enhancer.setCallback(new MethodInterceptor() {
+        @Override
+        public Object intercept(Object o, Method method, Object[] objects, MethodProxy methodProxy) throws Throwable {
+            System.out.println("被拦截了");
+            return methodProxy.invokeSuper(o, objects);
+        }
+    });
+
+    return (ProxyClass2) enhancer.create();
+}
+```
+
+### Spring 开启注解
+
+1. beans参数
+
+`xmlns:context="http://www.springframework.org/schema/context"`
+
+2. beans参数的xsi:schemaLocation
+
+```
+http://www.springframework.org/schema/context
+
+http://www.springframework.org/schema/context/spring-context.xsd"
+```
+
+3. bean配置
+
+```
+<context:annotation-config></context:annotation-config>
+<context:component-scan base-package="Service"></context:component-scan>
+<context:component-scan base-package="Dao"></context:component-scan>
+```
+
+### Spring AOP Alliance
+
+`spring-aop`
+
+`aopalliance`
+
+#### 半自动AOP
+
+bean配置:
+
+```
+<bean id="hwhw" class="Service.ProxyTest"></bean>
+
+<bean id="MyAspect" class="Service.MyAspect"></bean>
+
+<bean id="hwhwProxy" class="org.springframework.aop.framework.ProxyFactoryBean">
+<!--<property name="interfaces" value="Service.hwhw"></property>-->
+<!-- interfaces是接口 -->
+<property name="target" ref="hwhw"></property>
+<!-- target为目标类 -->
+<property name="interceptorNames" value="MyAspect"></property>
+<!-- interceptorNames是切面类,这个不能使用ref,必须使用value -->
+<property name="optimize" value="true"></property>
+<!-- optimize参数的value为true时,使用cglib生成代理 -->
+</bean>
+```
+
+切面类 案例:
+
+```
+public class MyAspect implements MethodInterceptor {
+    @Override
+    public Object invoke(MethodInvocation methodInvocation) throws Throwable {
+        System.out.println("开启");
+        Object odj = methodInvocation.proceed();
+        System.out.println("提交");
+        return odj;
+    }
+}
+```
+
+#### 全自动AOP
+
+切面类同上
+
+另加: `aspectjweaver`
+
+1. beans配置
+
+`xmlns:aop="http://www.springframework.org/schema/aop"`
+
+2. beans参数的xsi:schemaLocation
+
+```
+http://www.springframework.org/schema/aop
+
+http://www.springframework.org/schema/aop/spring-aop.xsd"
+```
+
+bean配置:
+
+```
+<bean id="proxyTest" class="Service.ProxyTest"></bean>
+
+<bean id="MyAspect" class="Service.MyAspect"></bean>
+
+<!-- proxy-target-class="true" 表示使用cglib -->
+<aop:config proxy-target-class="true">
+    <aop:pointcut id="Mypointcut" expression="execution(* Service.*.*(..))"/>
+    <!-- 第一个 * 代表返回值类型,Service 表示包,Service后面的第一个星表示类,第二个星表示方法, (..) 代表方法参数 -->
+    <aop:advisor advice-ref="MyAspect" pointcut-ref="Mypointcut"></aop:advisor>
+</aop:config>
+```
+
+#### AspectJ 
+
+`aspectjweaver spring-aspects`
+
+bean配置:
+
+```
+<bean id="proxyTest" class="Service.ProxyTest"></bean>
+
+<bean id="Aspect1" class="Service.Aspect1"></bean>
+
+<aop:config proxy-target-class="true">
+    <aop:aspect ref="Aspect1">
+        <aop:pointcut id="MyPointCut" expression="execution(* Service.*.*(..))"/>
+
+
+        <aop:around method="Round" pointcut-ref="MyPointCut"></aop:around>
+
+        <aop:after method="afterReturnAspect" pointcut-ref="MyPointCut"></aop:after>
+        <aop:after method="afterAspect" pointcut-ref="MyPointCut"></aop:after>
+        <aop:before method="beforeAspect" pointcut-ref="MyPointCut"></aop:before>
+        <aop:after-throwing method="myThrowing" pointcut-ref="MyPointCut" throwing="e"></aop:after-throwing>
+    </aop:aspect>
+</aop:config>
+```
+
+Aspect1:
+
+```
+public class Aspect1 {
+
+    public void beforeAspect(){
+        System.out.println("beforeAspect");
+    }
+
+    public void afterAspect(JoinPoint joinPoint) {
+        System.out.println("afterAspect");
+    }
+
+    public void afterReturnAspect(JoinPoint joinPoint) {
+        System.out.println("afterReturnAspect");
+    }
+
+    public Object Round(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
+        System.out.println("开始");
+        Object res = proceedingJoinPoint.proceed();
+        System.out.println("结束");
+        return res;
+    }
+
+    public void myThrowing (JoinPoint joinPoint, Throwable e) {
+        System.out.println("error");
+    }
+}
+```
+
+##### AspectJ注解
+
+```
+<context:component-scan base-package="Service"></context:component-scan>
+<aop:aspectj-autoproxy></aop:aspectj-autoproxy>
+<aop:config proxy-target-class="true">
+    <aop:aspect ref="aspect1"></aop:aspect>
+</aop:config>
+```
+
+Aspect类:
+
+```
+@Component
+@Aspect
+public class Aspect1 {
+
+    @Pointcut("execution(* Service.ProxyTest.*(..))")
+    public void myPoint(){}
+
+    @Before("myPoint()")
+    public void beforeAspect(){
+        System.out.println("beforeAspect");
+    }
+
+    public void afterAspect() {
+        System.out.println("afterAspect");
+    }
+
+    @AfterReturning(pointcut = "myPoint()", returning = "res")
+    public void afterReturnAspect(JoinPoint joinPoint,Object res) {
+        System.out.println("afterReturnAspect " + res);
+    }
+
+    public Object Round(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
+        System.out.println("开始");
+        Object res = proceedingJoinPoint.proceed();
+        System.out.println("结束");
+        return res;
+    }
+
+    public void myThrowing (JoinPoint joinPoint, Throwable e) {
+        System.out.println("error");
+    }
+}
+```
