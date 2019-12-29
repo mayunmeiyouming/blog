@@ -41,15 +41,10 @@ TSS的字段分为两类：
 + 先前执行的任务的TSS的selector（仅在可能返回时更新）
 
 2. 处理器读取但不会更改的静态集。该集合包括存储以下内容的字段：
-
 + 任务的LDT的selector
-
 + 包含任务页目录基址的寄存器（PDBR）（仅在启用分页时才只读）
-
 + 指向特权级别0-2的堆栈的指针。
-
 + T位（调试陷阱位），当任务切换发生时，导致处理器触发调试异常。
-
 + The I/O map base
 
 任务状态段可以位于线性空间中的任何位置。唯一需要注意的情况是TSS跨越页面边界以及高地址页面不存在。在这种情况下，如果在任务切换期间读取TSS时处理器遇到不存在的页面，则会引发异常。可以通过以下两种策略之一避免此类异常：
@@ -60,3 +55,53 @@ TSS的字段分为两类：
 
 <span id="01">
 ![]({{ '/styles/images/2019-12-29-Multitasking/01.gif' | prepend: site.baseurl }})
+
+# TSS描述符（TSS Descriptor）
+
+与其他所有段一样，任务状态段由描述符定义。 TSS描述符的格式如[图7-2](#02)所示。
+
+类型字段中的B位指示任务是否忙。类型代码9表示忙碌(B位为0)的任务；类型代码11表示任务繁忙(B位为1)。任务是不可重入的。 B位允许处理器检测意图切换到已经繁忙的任务的行为。BASE，LIMIT和DPL字段以及G位和P位的功能类似于数据段描述符中的对应功能。但是，LIMIT字段的值必须大于或等于103。尝试切换到其TSS描述符的限制小于103的任务会导致异常。更大的限制是可以的，如果存在I / O权限映射，则需要更大的限制。如果将其他数据存储在与TSS相同的段中，则较大的限制可能也便于系统软件的使用。
+
+有权访问TSS描述符的程序可能引发任务切换。在大多数系统中，TSS描述符的DPL字段应设置为零，以便只有受信任的软件才有权执行任务切换。
+
+程序拥有对TSS描述符的访问权，但是没有读取或修改TSS的权利。只能使用能将TSS重新定义为数据段的描述符来完成读取和修改。尝试将TSS描述符加载到任何段寄存器（CS，SS，DS，ES，FS，GS）中都会导致异常。
+
+TSS描述符只能存放在GDT中。尝试使用TI = 1（指当前LDT）的selector去识别TSS会导致异常。
+
+<span id="02">
+![]({{ '/styles/images/2019-12-29-Multitasking/02.gif' | prepend: site.baseurl }})
+
+# Task Register
+
+任务寄存器（TR）通过指向TSS来标识当前正在执行的任务。[图7-3](#03)显示了处理器访问当前TSS的方法。
+
+任务寄存器具有`可见`部分（即，可以由指令读取和改变）和`不可见`部分（由处理器维护以对应于可见部分；不能由任何指令读取）。可见部分中的`selector`选择GDT中的TSS描述符。处理器使用不可见部分来缓存TSS描述符中的base和limit值。将base和limit保存在寄存器中可以使任务的执行效率更高，因为处理器在引用当前任务的TSS时不需要从内存中重复获取这些值。
+
+LTR和STR指令用于修改和读取任务寄存器的可见部分。两条指令都使用一个操作数，即位于内存或通用寄存器中的16位selector。
+
+LTR（Load task register）使用selector作为操作数存储到任务寄存器的可见部分，这个selector一定会指向GDT中的一个TSS描述符。LTR还会将操作数指向的TSS描述符中的信息存储在任务寄存器中的不可见部分。 LTR是特权指令；它只有在CPL为零时才能执行。LTR通常用于在系统初始化期间为任务寄存器提供初始值。此后，TR的内容通过任务切换操作进行更改。
+
+STR（Store task register）读取任务寄存器的可见部分，并存储在通用寄存器或内存中。 STR不需要特权。
+
+<span id="03">
+![]({{ '/styles/images/2019-12-29-Multitasking/03.gif' | prepend: site.baseurl }})
+
+# Task Gate Descriptor
+
+Task Gate Descriptor对TSS提供了间接的，受保护的引用。[图7-4](#04)说明了Task Gate的格式。
+
+Task Gate的SELECTOR字段必须引用TSS描述符。处理器未使用selector中的RPL值。
+
+Task Gate的DPL字段控制使用描述符进行任务切换的权限。除非selector的RPL和程序的CPL的最大值在数值上小于或等于描述符的DPL，否则程序可能不会选择Task Gate Descriptor。此约束可防止不受信任的程序导致任务切换。（请注意，使用task gate时，目标TSS描述符的DPL不用于特权检查。）
+
+可以访问task gate的程序有权执行任务切换，就像可以访问TSS描述符的程序一样。80386除TSS描述符外还具有task gate，可以满足以下三个需求：
+
+1. 一个任务需要有一个busy bit。因为busy bit存储在TSS描述符中，所以每个任务应该只有一个这样的描述符。但是，可能会有多个task gate选择同一个TSS描述符。
+
+2. 提供对任务的选择性访问的需求。任务门可以满足此需求，因为它们可以驻留在LDT中，并且拥有与TSS描述符的DPL不同的DPL。如果程序没有访问GDT中的TSS描述符（通常DPL为0）的特权，但该程序可以访问该任务在LDT中的task gate，则该程序仍可以切换到另一个任务。使用task gate，系统软件可以限制任务切换到特定任务的权利。
+
+<span id="04">
+![]({{ '/styles/images/2019-12-29-Multitasking/04.gif' | prepend: site.baseurl }})
+
+<span id="05">
+![]({{ '/styles/images/2019-12-29-Multitasking/05.gif' | prepend: site.baseurl }})
