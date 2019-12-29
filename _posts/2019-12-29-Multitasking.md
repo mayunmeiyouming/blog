@@ -50,4 +50,4 @@ By allocating the TSS so that it does not cross a page boundary.
 By ensuring that both pages are either both present or both not-present at the time of a task switch. If both pages are not-present, then the page-fault handler must make both pages present before restarting the instruction that caused the task switch.
 
 <span id="01">
-![]({{ '/styles/images/2019-04-06-hello-github/01.png' | prepend: site.baseurl }})
+![]({{ '/styles/images/2019-12-29-Multitasking/01.gif' | prepend: site.baseurl }})
