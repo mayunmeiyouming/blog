@@ -2,8 +2,8 @@
 layout: post
 title:  "Hello Markdown"
 date:   2019-04-06 14:00:01 +0800
-categories: markdown
-tag: markdown语法
+categories: Markdown
+tag: Markdown
 ---
 
 * content

@@ -2,8 +2,8 @@
 layout: post
 title:  "JSP,Servlet,EL,JSTl"
 date:   2019-07-26 16:01:01 +0800
-categories: JSP
-tag: WEB
+categories: Web
+tag: Jsp
 ---
 
 * content

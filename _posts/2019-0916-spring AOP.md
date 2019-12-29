@@ -2,8 +2,8 @@
 layout: post
 title:  "Spring AOP"
 date:   2019-09-16 22:11:01 +0800
-categories: AOP
-tag: Spring
+categories: Spring
+tag: AOP
 ---
 
 * content
