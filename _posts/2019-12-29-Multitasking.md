@@ -31,23 +31,37 @@ tag: 80386
 
 处理器管理任务所需的所有信息都存储在特殊类型的段中，即任务状态段（TSS）。[Figure 7-1](#01)显示了用于执行80386任务的TSS格式。
 
-The fields of a TSS belong to two classes:
+TSS的字段分为两类：
 
-A dynamic set that the processor updates with each switch from the task. This set includes the fields that store:
-The general registers (EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI).
-The segment registers (ES, CS, SS, DS, FS, GS).
-The flags register (EFLAGS).
-The instruction pointer (EIP).
-The selector of the TSS of the previously executing task (updated only when a return is expected).
-A static set that the processor reads but does not change. This set includes the fields that store:
-The selector of the task's LDT.
-The register (PDBR) that contains the base address of the task's page directory (read only when paging is enabled).
-Pointers to the stacks for privilege levels 0-2.
-The T-bit (debug trap bit) which causes the processor to raise a debug exception when a task switch occurs . (Refer to Chapter 12 for more information on debugging.)
-The I/O map base (refer to Chapter 8 for more information on the use of the I/O map).
-Task state segments may reside anywhere in the linear space. The only case that requires caution is when the TSS spans a page boundary and the higher-addressed page is not present. In this case, the processor raises an exception if it encounters the not-present page while reading the TSS during a task switch. Such an exception can be avoided by either of two strategies:
-By allocating the TSS so that it does not cross a page boundary.
-By ensuring that both pages are either both present or both not-present at the time of a task switch. If both pages are not-present, then the page-fault handler must make both pages present before restarting the instruction that caused the task switch.
+1. 处理器随着任务的每一次切换而更新动态集。该集合包括存储以下内容的字段：
+
++ 通用寄存器（EAX，ECX，EDX，EBX，ESP，EBP，ESI，EDI）
+
++ 段寄存器（ES，CS，SS，DS，FS，GS）
+
++ 标志寄存器（EFLAGS）
+
++ 指令指针（EIP）
+
++ 先前执行的任务的TSS的selector（仅在可能返回时更新）
+
+2. 处理器读取但不会更改的静态集。该集合包括存储以下内容的字段：
+
++ 任务的LDT的selector
+
++ 包含任务页目录基址的寄存器（PDBR）（仅在启用分页时才只读）
+
++ 指向特权级别0-2的堆栈的指针。
+
++ T位（调试陷阱位），当任务切换发生时，导致处理器触发调试异常。
+
++ The I/O map base
+
+任务状态段可以位于线性空间中的任何位置。唯一需要注意的情况是TSS跨越页面边界以及高地址页面不存在。在这种情况下，如果在任务切换期间读取TSS时处理器遇到不存在的页面，则会引发异常。可以通过以下两种策略之一避免此类异常：
+
+1. 通过分配TSS，使其不跨越页面边界。
+
+2. 通过确保在任务切换时两个页面都存在或不存在。如果两个页面都不存在，那么缺页异常处理程序必须在重新启动导致任务切换的指令之前使两个页面都存在。
 
 <span id="01">
 ![]({{ '/styles/images/2019-12-29-Multitasking/01.gif' | prepend: site.baseurl }})
