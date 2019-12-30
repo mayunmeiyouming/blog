@@ -9,7 +9,7 @@ tag: 80386
 * content
 {:toc}
 
->本文为原创
+>本文为翻译
 
 为了提供有效的，受保护的多任务处理，80386采用了几种特殊的数据结构。但是，它没有使用特殊的指令来控制多任务。相反，当它们引用特殊数据结构时，它会以不同的方式去解释普通控制传递指令。支持多任务的寄存器和数据结构有：
 
@@ -132,8 +132,23 @@ JMP，CALL，IRET，中断和异常是80386的所有普通机制，可以在不�
 
 任务切换操作涉及以下步骤：
 
-1. 检查是否允许当前任务切换到指定任务。
+1. 检查是否允许当前任务切换到指定任务。数据访问特权规则适用于JMP或CALL指令。 TSS描述符或任务门的DPL必须在数值上大于（例如，较低的特权级别）大于或等于`selector`的CPL和RPL的最大值。无论目标任务门的DPL或TSS描述符如何，都可以通过异常，中断和IRET来切换任务。
 
+2. 检查新任务的TSS描述符是否被标记为存在并具有有效限制。到此为止的任何错误都将在传给任务的上下文。错误是可重新启动的，并且可以以一种对应用程序透明的方式进行处理。
+
+3. 保存当前任务的状态。处理器找到任务寄存器中缓存的当前TSS的基地址。它将寄存器复制到当前的TSS（EAX，ECX，EDX，EBX，ESP，EBP，ESI，EDI，ES，CS，SS，DS，FS，GS和标志寄存器）。TSS的EIP字段指向导致任务切换的指令之后的指令。
+
+4. 使用任务寄存器的`selector`加载任务的TSS描述符，并将任务的TSS描述符标记为忙的状态，然后将MSW的TS位（任务切换）置1。`selector`可以是控制传递指令的操作数，也可以是从任务门获取的。
+
+5. 从其TSS加载传入任务的状态并恢复执行。加载的寄存器为LDT寄存器；标志寄存器；通用寄存器EIP，EAX，ECX，EDX，EBX，ESP，EBP，ESI，EDI;段寄存器ES，CS，SS，DS，FS和GS；和PDBR。在此步骤中检测到的任何错误都在传入任务的上下文中发生。
+
+请注意，发生任务切换时，正在进行的任务的状态始终会保存。如果恢复执行该任务，它将在引起任务切换的指令之后开始。当任务停止执行时，寄存器将恢复为其所保存的值。
+
+每个任务切换都会将MSW（机器状态字）中的TS位（任务切换）置1。如果存在协处理器（例如数字协处理器），则TS标志对于系统软件很有用。TS位发出信号，表明协处理器的上下文可能不同于当前的80386任务。
+
+在传入任务中记录任务切换异常的异常处理程序（表7-1的Test 4 - 16导致的异常）应谨慎对待可能加载导致异常的选择器的任何操作。除非异常处理程序首先检查`selector`并解决任何潜在问题，否则此类操作可能会导致另一个异常。
+
+新任务的恢复执行的特权级别不受要旧任务执行时的特权级别的限制或影响。由于任务被它们各自的地址空间和TSS隔离，并且可以使用特权规则来防止对TSS的不正确访问，因此不需要特权规则来约束任务CPL之间的关系。新任务以TSS中的CS的selectord1值的RPL指示的特权级别开始执行。
 
 ```
 Table 7-1. Checks Made during a Task Switch
@@ -182,3 +197,76 @@ Test     Test Description                   Exception    Error Code Selects
          >= CPL (unless these are
          conforming segments)               GP           Segment
 ```
+
+# Task Linking
+
+TSS的back-link字段和标志字的NT位（嵌套任务）允许80386自动返回调用了另一个任务或被另一个任务中断的任务。当CALL指令，中断指令，外部中断或异常导致切换到新任务时，80386自动使用旧任务的TSS的选择器填充新TSS的back-link，同时，将新任务的标志寄存器中的NT位置1。NT标志指示back-link字段是否有效。新任务通过执行IRET指令释放控制权。解释IRET时，80386将检查NT标志。如果设置了NT，则80386将切换回由back-link字段选择的任务。表7-2总结了这些字段的用法。
+
+```
+Table 7-2. Effect of Task Switch on BUSY, NT, and Back-Link
+
+Affected Field      Effect of JMP      Effect of            Effect of
+                    Instruction        CALL Instruction     IRET Instruction
+
+Busy bit of         Set, must be       Set, must be 0       Unchanged,
+incoming task       0 before           before               must be set
+
+Busy bit of         Cleared            Unchanged            Cleared
+outgoing task                          (already set)
+
+NT bit of           Cleared            Set                  Unchanged
+incoming task
+
+NT bit of           Unchanged          Unchanged            Cleared
+outgoing task
+
+Back-link of        Unchanged          Set to outgoing      Unchanged
+incoming task                          TSS selector
+
+Back-link of        Unchanged          Unchanged            Unchanged
+outgoing task
+```
+
+## Busy Bit Prevents Loops
+
+TSS描述符的B位（busy bit）确保反向链接的完整性。随着中断任务中断其他中断任务或被调用任务调用其他任务，反向链接链的长度可能会增加。busy bit确保CPU可以检测到任何尝试创建循环的行为。循环将表明尝试重新进入已经在运行的任务。但是，TSS不是可重入的资源。
+
+处理器按以下方式使用busy bit：
+
+1. 切换到任务时，处理器会自动设置新任务的busy bit。
+
+2. 从任务切换时，如果不将旧任务的busy bit放置在反向链接链上（即引起任务切换的指令是JMP或IRET），则处理器会自动清除该任务的busy bit。如果将任务放置在反向链接链上，则其busy bit将保持忙的状态。
+
+3. 切换到任务时，如果新任务的busy bit已设置，则处理器会发出异常信号。
+
+通过这些操作，处理器可以防止任务切换到自身或切换到反向链接链上的任何任务，从而防止任务的无效的重入。
+
+即使在多处理器配置中busy bit也有效，因为处理器在设置或清除busy位时会自动对总线加锁。此操作可确保两个处理器不会同时调用同一任务。
+
+## Modifying Task Linkages
+
+任务链顺序的任何修改都应仅通过可信任的软件来完成，以便正确的更新back-link和the busy-bit。在中断任务之前，可能需要进行此类更改才能恢复中断的任务。受信任的软件从反向链接链中删除任务必须遵循以下策略之一：
+
+1. 首先更改中断任务的TSS中的反向链接字段，然后将列表中被删除的任务的TSS描述符中的busy位清除。
+
+2. 确保在更新back-link和busy-bit的时候没有中断发生。
+
+# 任务地址空间（Task Address Space）
+
+TSS的LDT selector和PDBR字段使软件系统设计人员可以灵活地利用80386的段和页面映射功能。通过为每个任务选择合适的段和页面映射，任务可以共享地址空间，也可以拥有彼此大不相同的地址空间，或者可以在这两个程序之间具有任何程度的共享。
+
+任务具有不同地址空间的能力是80386保护模式的重要方面。如果模块无法访问相同的地址空间，则一个任务中的模块不能干扰另一任务中的模块。80386灵活的内存管理功能使系统设计人员可以将共享地址空间的区域分配给需要相互协作的不同任务的一些模块。
+
+## Task Linear-to-Physical Space Mapping
+
+任务的线性地址到物理地址的映射的有两种选择：
+
+1. 所有任务之间共享一个线性地址到物理地址的映射。
+未启用分页时，这是唯一的可能性。没有页表，所有线性地址都映射到相同的物理地址。
+启用分页时，这种线性地址到物理地址的映射方式是所有任务使用一个页目录。如果操作系统还实现页面级虚拟内存，则利用的线性空间可能会超过可用的物理空间。
+
+2. 线性地址到物理地址的映射有几个部分重叠。
+通过为每个任务使用不同的页目录来实现这种形式。由于PDBR（页目录基址寄存器）是在任务切换时从TSS中加载的，因此每个任务可能具有不同的页目录。
+
+<span id="06">
+![]({{ '/styles/images/2019-12-29-Multitasking/06.gif' | prepend: site.baseurl }})
