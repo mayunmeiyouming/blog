@@ -102,7 +102,7 @@ Task Gate的DPL字段控制使用描述符进行任务切换的权限。除非se
 
 3. 需要中断或异常触发任务切换。task gate也可以驻留在IDT中，从而使中断和异常可能触发任务切换。当中断或异常引导到包含task gate的IDT条目时，80386将切换到指定的任务。因此，系统中的所有任务都可以从中断任务隔离提供的保护中受益。
 
-[图7-5](#id05)说明了LDT中的task gate和IDT中的task gate是如何识别同一任务。
+[图7-5](#05)说明了LDT中的task gate和IDT中的task gate是如何识别同一任务。
 
 <span id="04">
 ![]({{ '/styles/images/2019-12-29-Multitasking/04.gif' | prepend: site.baseurl }})
