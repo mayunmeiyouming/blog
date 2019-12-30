@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Multitasking"
+title:  "Chapter 7 Multitasking"
 date:   2019-12-29 13:45:01 +0800
 categories: Assembly
 tag: Intel 80386 Reference Programmer's Manual Table of Contents
