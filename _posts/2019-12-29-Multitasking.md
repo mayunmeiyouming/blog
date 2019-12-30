@@ -3,7 +3,7 @@ layout: post
 title:  "Multitasking"
 date:   2019-12-29 13:45:01 +0800
 categories: Assembly
-tag: 80386
+tag: Intel 80386 Reference Programmer's Manual Table of Contents
 ---
 
 * content
