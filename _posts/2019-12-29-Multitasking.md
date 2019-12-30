@@ -122,4 +122,63 @@ Task Gate的DPL字段控制使用描述符进行任务切换的权限。除非se
 
 4. 设置NT标志时，当前任务将执行`IRET`。
 
-JMP，CALL，IRET，中断和异常是80386的所有普通机制，可以在不需要任务切换的情况下使用。
+JMP，CALL，IRET，中断和异常是80386的所有普通机制，可以在不需要任务切换的情况下使用。引用的描述符类型或标志字中的NT（嵌套任务）位都可以区分标准机制和导致任务切换的变量。
+
+要引起任务切换，JMP或CALL指令可以引用TSS描述符或任务门。两种情况下的效果都相同：80386切换到指定的任务。
+
+当异常或中断引导至IDT中的任务门时，将导致任务切换。如果它引导到IDT中的中断或陷阱门，则不会发生任务切换。
+
+无论是作为任务被调用还是作为中断任务的程序被调用，中断处理程序始终将控制权返回给被中断的程序。但是，如果设置了NT标志，则处理程序为中断任务，IRET切换回中断的任务。
+
+任务切换操作涉及以下步骤：
+
+1. 检查是否允许当前任务切换到指定任务。
+
+
+```
+Table 7-1. Checks Made during a Task Switch
+
+NP = Segment-not-present exception 
+GP = General protection fault 
+TS = Invalid TSS 
+SF = Stack fault
+
+Validity tests of a selector check that the selector is in the proper
+table (e.g., the LDT selector refers to the GDT), lies within the bounds of
+the table, and refers to the proper type of descriptor (e.g., the LDT
+selector refers to an LDT descriptor).
+
+Test     Test Description                   Exception    Error Code Selects
+
+  1      Incoming TSS descriptor is 
+         present                            NP           Incoming TSS
+  2      Incoming TSS descriptor is 
+         marked not-busy                    GP           Incoming TSS
+         marked not-busy
+  3      Limit of incoming TSS is
+         greater than or equal to 103       TS           Incoming TSS
+
+             -- All register and selector values are loaded --
+
+  4      LDT selector of incoming 
+         task is valid                      TS           Incoming TSS
+  5      LDT of incoming task is  
+         present                            TS           Incoming TSS
+  6      CS selector is valid               TS           Code segment
+  7      Code segment is present            NP           Code segment
+  8      Code segment DPL matches  
+         CS RPL                             TS           Code segment
+  9      Stack segment is valid             GP           Stack segment 
+ 10      Stack segment is present           SF           Stack segment
+ 11      Stack segment DPL = CPL            SF           Stack segment
+ 12      Stack-selector RPL = CPL           GP           Stack segment
+ 13      DS, ES, FS, GS selectors are
+         valid                              GP           Segment
+ 14      DS, ES, FS, GS segments 
+         are readable                       GP           Segment
+ 15      DS, ES, FS, GS segments 
+         are present                        NP           Segment
+ 16      DS, ES, FS, GS segment DPL  
+         >= CPL (unless these are
+         conforming segments)               GP           Segment
+```
