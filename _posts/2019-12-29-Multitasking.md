@@ -98,10 +98,28 @@ Task Gate的DPL字段控制使用描述符进行任务切换的权限。除非se
 
 1. 一个任务需要有一个busy bit。因为busy bit存储在TSS描述符中，所以每个任务应该只有一个这样的描述符。但是，可能会有多个task gate选择同一个TSS描述符。
 
-2. 提供对任务的选择性访问的需求。任务门可以满足此需求，因为它们可以驻留在LDT中，并且拥有与TSS描述符的DPL不同的DPL。如果程序没有访问GDT中的TSS描述符（通常DPL为0）的特权，但该程序可以访问该任务在LDT中的task gate，则该程序仍可以切换到另一个任务。使用task gate，系统软件可以限制任务切换到特定任务的权利。
+2. 提供对任务的选择性访问的需求。任务门可以满足此需求，因为它们可以驻留在LDT中，并且拥有与TSS描述符的DPL不同的DPL。如果程序没有访问GDT中的TSS描述符（通常DPL为0）的特权，但该程序可以访问该任务在LDT中的task gate，则该程序仍可以切换到另一个任务。使用task gate，系统软件拥有限制任务切换到特定任务的权利。
+
+3. 需要中断或异常触发任务切换。task gate也可以驻留在IDT中，从而使中断和异常可能触发任务切换。当中断或异常引导到包含task gate的IDT条目时，80386将切换到指定的任务。因此，系统中的所有任务都可以从中断任务隔离提供的保护中受益。
+
+[图7-5](#id05)说明了LDT中的task gate和IDT中的task gate是如何识别同一任务。
 
 <span id="04">
 ![]({{ '/styles/images/2019-12-29-Multitasking/04.gif' | prepend: site.baseurl }})
 
 <span id="05">
 ![]({{ '/styles/images/2019-12-29-Multitasking/05.gif' | prepend: site.baseurl }})
+
+# 任务切换（Task Switching）
+
+在以下四种情况中的任何一种情况下，80386都会切换到另一个任务：
+
+1. 当前任务将执行引用TSS描述符的`JMP`或`CALL`。
+
+2. 当前任务执行引用task gate的`JMP`或`CALL`。
+
+3. 中断或异常触发了在IDT中的task gate。
+
+4. 设置NT标志时，当前任务将执行`IRET`。
+
+JMP，CALL，IRET，中断和异常是80386的所有普通机制，可以在不需要任务切换的情况下使用。
