@@ -480,13 +480,20 @@ env_alloc代码如下：
 	e->env_tf.tf_eflags |= FL_IF;
 ```
 
-如果出现如下错误：
+取消在`kern/shed.c sched_halt()`中`sti`的注释，开启中断
+
+如果出现下面的错误：
 
 ```
 kernel panic on CPU 0 at kern/trap.c:310: assertion failed: !(read_eflags() & FL_IF)
 ```
 
-可以注释产生错误的那行代码
+是因为在注册中断的开启了trap，设置为0就行
+
+```
+SETGATE(idt[T_PGFLT], 0, GD_KT, &th_pgflt, 0);
+```
+
 
 #### 处理时钟中断
 
@@ -503,10 +510,11 @@ kernel panic on CPU 0 at kern/trap.c:310: assertion failed: !(read_eflags() & FL
 代码如下：
 
 ```
-	case IRQ_OFFSET + IRQ_TIMER:
-		lapic_eoi();  //暂时不是用处，疑似告诉lapic，开始处理中断了
-		sched_yield();
-		break;
+    if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+        lapic_eoi();
+        sched_yield();
+        return;
+    }
 ```
 
 ### 进程间通信（IPC）
@@ -547,6 +555,15 @@ kernel panic on CPU 0 at kern/trap.c:310: assertion failed: !(read_eflags() & FL
 
 使用`user/pingpong`和`user/primes`函数来测试IPC机制。`user/primes`将为每个素数生成一个新环境，直到JOS用尽环境为止。你可以通过阅读`user/primes.c`以了解所有的分支和IPC的情况。
 
+`kern/syscall.c syscall`添加如下代码：
+
+```
+case SYS_ipc_try_send:
+	return sys_ipc_try_send(a1, a2, (void *)a3, a4);
+case SYS_ipc_recv:
+	return sys_ipc_recv((void *)a1);
+```
+
 sys_ipc_recv代码如下：
 
 ```
@@ -561,18 +578,19 @@ sys_ipc_recv代码如下：
 static int sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	if(dstva < UTOP && ((int)dstva) / PGSIZE != 0)
+    if ((uintptr_t) dstva < UTOP && ((uintptr_t)dstva) % PGSIZE != 0) {
 		return -E_INVAL;
-	
-	if(dstva < UTOP)
+	}
+		
+	if((uintptr_t)dstva < UTOP)
 		curenv->env_ipc_dstva = dstva;
 	
 	curenv->env_ipc_recving = true;
 	curenv->env_status = ENV_NOT_RUNNABLE;
 
-	sys_yield();
-	//永远不会执行
-	return 0;
+    sys_yield();
+
+    return 0;
 }
 ```
 
@@ -670,19 +688,26 @@ ipc_recv代码如下：
 int32_t ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
 {
 	// LAB 4: Your code here.
-	int32_t retval = (pg == NULL) ? sys_ipc_recv((void*)UTOP) : sys_ipc_recv(pg);
-
-	if (retval == 0) {
-		if(from_env_store != NULL)
+    int r;
+    if (pg != NULL) {
+        r = sys_ipc_recv(pg);
+    } else {
+        r = sys_ipc_recv((void *) UTOP);
+    }
+    if (r < 0) {
+        // failed
+        if (from_env_store != NULL) 
+			*from_env_store = 0;
+        if (perm_store != NULL) 
+			*perm_store = 0;
+        return r;
+    } else {
+        if (from_env_store != NULL) 
 			*from_env_store = thisenv->env_ipc_from;
-		if(perm_store != NULL)
+        if (perm_store != NULL) 
 			*perm_store = thisenv->env_ipc_perm;
-	} else {
-		*from_env_store = 0;
-		*perm_store = 0;
-	}
-	
-	return 0;
+        return thisenv->env_ipc_value;
+    }
 }
 ```
 
@@ -708,11 +733,11 @@ ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
 			retval = sys_ipc_try_send(to_env, val, pg, perm);
 		else 
 			retval = sys_ipc_try_send(to_env, val, (void*)UTOP, perm);
-
-		if(retval != -E_IPC_NOT_RECV && retval != 0)
+			
+		if(retval == 0)
+			sys_yield();
+		else if(retval != -E_IPC_NOT_RECV)
 			panic("Receving wrong return value of sys_ipc_try_send");
-
-        sys_yield();
 	}
 }
 ```
