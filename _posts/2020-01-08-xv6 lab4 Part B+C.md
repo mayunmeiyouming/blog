@@ -402,3 +402,307 @@ fork(void)
 
 完成此练习后，如果你使用运行时间很短（例如，旋转）的任何测试程序来运行内核，则应该看到内核打印的陷阱帧。现在在处理器中启用了中断，但是JOS尚未处理它们，因此你应该看到它将每个中断错误地分配给了当前正在运行的用户环境并销毁了它。
 
+trapentry.S代码如下：
+
+```
+TRAPHANDLER_NOEC(IRQ_0, 32)
+TRAPHANDLER_NOEC(IRQ_1, 33)
+TRAPHANDLER_NOEC(IRQ_2, 34)
+TRAPHANDLER_NOEC(IRQ_3, 35)
+TRAPHANDLER_NOEC(IRQ_4, 36)
+TRAPHANDLER_NOEC(IRQ_5, 37)
+TRAPHANDLER_NOEC(IRQ_6, 38)
+TRAPHANDLER_NOEC(IRQ_7, 39)
+TRAPHANDLER_NOEC(IRQ_8, 40)
+TRAPHANDLER_NOEC(IRQ_9, 41)
+TRAPHANDLER_NOEC(IRQ_10, 42)
+TRAPHANDLER_NOEC(IRQ_11, 43)
+TRAPHANDLER_NOEC(IRQ_12, 44)
+TRAPHANDLER_NOEC(IRQ_13, 45)
+TRAPHANDLER_NOEC(IRQ_14, 46)
+TRAPHANDLER_NOEC(IRQ_15, 47)
+```
+
+trap_init.c代码如下：
+
+```
+	//IRQ
+	extern int IRQ_0;
+	extern int IRQ_1;
+	extern int IRQ_2;
+	extern int IRQ_3;
+	extern int IRQ_4;
+	extern int IRQ_5;
+	extern int IRQ_6;
+	extern int IRQ_7;
+	extern int IRQ_8;
+	extern int IRQ_9;
+	extern int IRQ_10;
+	extern int IRQ_11;
+	extern int IRQ_12;
+	extern int IRQ_13;
+	extern int IRQ_14;
+	extern int IRQ_15;
+
+	SETGATE(idt[IRQ_OFFSET + 0], 0, GD_KT, &IRQ_0, 0);
+	SETGATE(idt[IRQ_OFFSET + 1], 0, GD_KT, &IRQ_1, 0);
+	SETGATE(idt[IRQ_OFFSET + 2], 0, GD_KT, &IRQ_2, 0);
+	SETGATE(idt[IRQ_OFFSET + 3], 0, GD_KT, &IRQ_3, 0);
+	SETGATE(idt[IRQ_OFFSET + 4], 0, GD_KT, &IRQ_4, 0);
+	SETGATE(idt[IRQ_OFFSET + 5], 0, GD_KT, &IRQ_5, 0);
+	SETGATE(idt[IRQ_OFFSET + 6], 0, GD_KT, &IRQ_6, 0);
+	SETGATE(idt[IRQ_OFFSET + 7], 0, GD_KT, &IRQ_7, 0);
+	SETGATE(idt[IRQ_OFFSET + 8], 0, GD_KT, &IRQ_8, 0);
+	SETGATE(idt[IRQ_OFFSET + 9], 0, GD_KT, &IRQ_9, 0);
+	SETGATE(idt[IRQ_OFFSET + 10], 0, GD_KT, &IRQ_10, 0);
+	SETGATE(idt[IRQ_OFFSET + 11], 0, GD_KT, &IRQ_11, 0);
+	SETGATE(idt[IRQ_OFFSET + 12], 0, GD_KT, &IRQ_12, 0);
+	SETGATE(idt[IRQ_OFFSET + 13], 0, GD_KT, &IRQ_13, 0);
+	SETGATE(idt[IRQ_OFFSET + 14], 0, GD_KT, &IRQ_14, 0);
+	SETGATE(idt[IRQ_OFFSET + 15], 0, GD_KT, &IRQ_15, 0);
+```
+
+env_alloc代码如下：
+
+```
+	// Enable interrupts while in user mode.
+	// LAB 4: Your code here.
+	e->env_tf.tf_eflags |= FL_IF;
+```
+
+如果出现如下错误：
+
+```
+kernel panic on CPU 0 at kern/trap.c:310: assertion failed: !(read_eflags() & FL_IF)
+```
+
+可以注释产生错误的那行代码
+
+#### 处理时钟中断
+
+在`user/spin`程序中，子进程首次运行后，它只是循环旋转，内核再也无法收回控制权。我们需要对硬件进行编程以定期生成时钟中断，这将迫使控制权回到内核，在内核中我们可以将控制权切换到其他用户环境。
+
+在`init.c`的`i386_init`中调用`lapic_init`和`pic_init`，用来设置时钟和中断控制器产生中断。现在，你需要编写代码来处理这些中断。
+
+##### Exercise 14
+
+修改内核的`trap_dispatch()`函数，以便在收到时钟中断时调用`sched_yield()`来查找并运行不同的环境。
+
+现在，你应该能够通过`user/spin`测试：父进程产生子进程，并调用`sys_yield()`几次，只有在经过一个时间片后，它们都将重新获得对CPU的控制权，最后终止子进程并优雅终止。
+
+代码如下：
+
+```
+	case IRQ_OFFSET + IRQ_TIMER:
+		lapic_eoi();  //暂时不是用处，疑似告诉lapic，开始处理中断了
+		sched_yield();
+		break;
+```
+
+### 进程间通信（IPC）
+
+我们一直专注于操作系统的隔离方面，使它给人的感觉是每个程序都拥有一台机器。操作系统的另一个重要服务是允许程序在需要时相互通信。让程序与其他程序交互可能会更加强大。Unix管道模型是典型示例。
+
+进程间通信的模型很多。即使在今天，仍然存在关于哪种模型最好的争论。我们不会参加这场辩论。相反，我们将尝试实现一个简单的IPC机制。
+
+#### JOS中的IPC
+
+你将为JOS内核实现一些其他的系统调用，这些调用共同提供了一种简单的进程间通信机制。你将实现两个系统调用`sys_ipc_recv`和`sys_ipc_try_send`。然后，你将实现两个库包装器`ipc_recv`和`ipc_send`。
+
+用户环境可以使用JOS的IPC机制相互发送的`消息`，这个机制由两个组件组成：单个32位值和可选的单个页面映射。允许环境在消息中传递页面映射可以提供一种有效的方式来传输比单个32位整数所容纳的数据更多的数据，并且还允许环境轻松地设置共享内存。
+
+#### 发送和接收消息
+
+环境调用`sys_ipc_recv`接收消息。此系统调用将对当前环境进行调度，并且在消息被收到之前不会再次运行它。当环境正在等待接收消息时，任何其他环境都可以向其发送消息-不仅是特定环境，而且不仅仅是与接收环境具有父子关系的环境。换句话说，你在A部分中实现的权限检查将不适用于IPC，因为IPC系统调用经过了精心设计，因此是`安全的`：一个环境不能仅仅通过向其发送消息而导致它发生故障。
+
+环境调用`sys_ipc_try_send`根据接收者的环境ID将要发送的值发送给接收者。如果指定的环境实际上正在接收信息（它已调用`sys_ipc_recv`但是还没有获得值），则发送消息给发送者，并返回0。否则，返回`-E_IPC_NOT_RECV`给发送者以指示目标环境当前不希望接收值。
+
+用户空间中的库函数`ipc_recv`将负责调用`sys_ipc_recv`，然后在当前环境的结构Env中查找有关接收的信息。
+
+同样，库函数`ipc_send`将负责重复调用`sys_ipc_try_send`，直到发送成功。
+
+#### Transferring Pages
+
+当环境使用有效的`dstva`参数（在`UTOP`之下）调用`sys_ipc_recv`时，则表明该环境愿意接收页面映射。如果发送方发送一个页面，则该页面应被映射到接收方地址空间中的`dstva`。如果接收者已经在`dstva`上映射了页面，则该先前映射的页面将被解除映射。
+
+当环境使用有效参数`srcva`（位于`UTOP`下）调用`sys_ipc_try_send`时，这意味着发送方希望将当前映射到`srcva`的页面发送给接收方，并具有权限`perm`。成功完成IPC之后，发送方将其页面的原始映射保留在其地址空间中的`srcva`处，然后接收方将在自己的地址空间中的`dstva`处获得此同一物理页面的映射。最后，该页面在发送者和接收者之间共享。
+
+如果发送方或接收方均未指示应传送页面，则不会传送任何页面。在完成任何IPC之后，内核会将接收者的Env结构中的新字段`env_ipc_perm`设置为接收到的页面的权限；如果未接收到任何页面，则将其设置为零。
+
+#### Exercise 15
+
+在`kern/syscall.c`中实现`sys_ipc_recv`和`sys_ipc_try_send`。在实现它们之前，请先阅读两者的注释，因为它们必须协同工作。在这些例程中调用`envid2env`时，应将`checkperm`标志设置为0，这意味着允许任何环境将IPC消息发送到任何其他环境，并且内核除了验证目标envid是否有效外，不执行任何特殊权限检查。
+
+然后在`lib/ipc.c`中实现`ipc_recv`和`ipc_send`函数。
+
+使用`user/pingpong`和`user/primes`函数来测试IPC机制。`user/primes`将为每个素数生成一个新环境，直到JOS用尽环境为止。你可以通过阅读`user/primes.c`以了解所有的分支和IPC的情况。
+
+sys_ipc_recv代码如下：
+
+```
+// 阻塞直到值准备就绪。 
+// 使用struct Env的env_ipc_recving和env_ipc_dstva字段记录要接收的内容，将自己标记为不可运行，然后放弃CPU。
+//
+// 如果'dstva'小于UTOP，则可以接收数据页面。 “dstva”是发送页面应映射到的虚拟地址。
+//
+// 该函数仅在出错时返回，但是系统调用最终将在成功时返回0。
+// Return < 0 on error.  Errors are:
+//	-E_INVAL if dstva < UTOP but dstva is not page-aligned.
+static int sys_ipc_recv(void *dstva)
+{
+	// LAB 4: Your code here.
+	if(dstva < UTOP && ((int)dstva) / PGSIZE != 0)
+		return -E_INVAL;
+	
+	if(dstva < UTOP)
+		curenv->env_ipc_dstva = dstva;
+	
+	curenv->env_ipc_recving = true;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+
+	sys_yield();
+	//永远不会执行
+	return 0;
+}
+```
+
+```
+// 尝试将`value`发送到目标环境“envid”。
+// 如果 srcva < UTOP，则将发送当前映射到“srcva”的页面，以便接收者共享同一页面。
+//
+// 如果目标未被阻塞，则发送失败，返回值为-E_IPC_NOT_RECV，等待IPC。
+//
+// 下面列出的其他原因，发送也会失败。
+//
+// 否则，发送将成功，并且目标的ipc字段将更新如下：
+//    env_ipc_recving设置为0以阻塞接下来的发送；
+//    env_ipc_from设置为发送对象的envid；
+//    env_ipc_value设置为参数'value'；
+//    如果已传输页面，则env_ipc_perm设置为“perm”，否则设置为0。
+// 目标环境再次标记为可运行，从暂停的sys_ipc_recv系统调用中返回0。 （提示：sys_ipc_recv函数实际上会返回吗？）
+//
+// 如果发送方要发送一个页面，但接收方不要求发送页面，则不会传输任何页面映射，并且不会发生错误。
+// ipc仅在没有错误发生时发生。
+//
+// Returns 0 on success, < 0 on error.
+// Errors are:
+//	-E_BAD_ENV if environment envid doesn't currently exist.
+//		(No need to check permissions.)
+//	-E_IPC_NOT_RECV if envid is not currently blocked in sys_ipc_recv,
+//		or another environment managed to send first.
+//	-E_INVAL if srcva < UTOP but srcva is not page-aligned.
+//	-E_INVAL if srcva < UTOP and perm is inappropriate
+//		(see sys_page_alloc).
+//	-E_INVAL if srcva < UTOP but srcva is not mapped in the caller's
+//		address space.
+//	-E_INVAL if (perm & PTE_W), but srcva is read-only in the
+//		current environment's address space.
+//	-E_NO_MEM if there's not enough memory to map srcva in envid's
+//		address space.
+static int sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
+{
+	// LAB 4: Your code here.
+	struct Env* env;
+	if(envid2env(envid, &env, false) < 0)
+		return -E_BAD_ENV;
+	
+	if(!(env->env_ipc_recving))
+		return -E_IPC_NOT_RECV;
+
+	env->env_ipc_perm = 0;
+	env->env_ipc_from = curenv->env_id;
+	env->env_ipc_value = value;
+
+	if (srcva < UTOP && (env->env_ipc_dstva) < UTOP) {
+		if((int)srcva % PGSIZE != 0)
+			return -E_INVAL;
+
+		if((~perm) & (PTE_U | PTE_P))
+			return -E_INVAL;
+
+		pte_t* pte_addr = NULL;
+		struct PageInfo* page = NULL;
+		page = page_lookup(curenv->env_pgdir, srcva, &pte_addr);
+		if(page == NULL)
+			return -E_INVAL;
+
+		if ((perm & PTE_W) && !((*pte_addr) & PTE_W))
+			-E_INVAL;
+		
+		int error_code;
+		if((error_code = page_insert(env->env_pgdir, page, env->env_ipc_dstva, perm)) < 0)
+			return error_code;
+		env->env_ipc_perm = perm;
+	}
+
+	env->env_ipc_recving = 0;
+	env->env_tf.tf_regs.reg_eax = 0;
+	env->env_status = ENV_RUNNABLE;
+	return 0;
+}
+```
+
+ipc_recv代码如下：
+
+```
+// 通过IPC接收值并将其返回。
+// 如果“pg”为非空，则发件人发送的任何页面都将映射到该地址。
+// 如果“from_env_store”为非空，则将IPC发送方的envid存储在*from_env_store中。
+// 如果'perm_store'为非null，则将IPC发件人的页面权限存储在*perm_store中
+//（如果页面已成功传输到'pg'，则此值为非零）。
+// 如果系统调用失败，则*fromenv和*perm中将存储0（如果它们为非null）并返回错误。
+// 否则，返回发件人发送的值
+//
+// Hint:
+//   使用“thisenv”发现值和发送者。
+//   如果'pg'为null，则向sys_ipc_recv传递一个被理解为“no page”的值。 
+//  （0不是正确的值，因为这是映射页面的完全有效的位置。）
+int32_t ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
+{
+	// LAB 4: Your code here.
+	int32_t retval = (pg == NULL) ? sys_ipc_recv((void*)UTOP) : sys_ipc_recv(pg);
+
+	if (retval == 0) {
+		if(from_env_store != NULL)
+			*from_env_store = thisenv->env_ipc_from;
+		if(perm_store != NULL)
+			*perm_store = thisenv->env_ipc_perm;
+	} else {
+		*from_env_store = 0;
+		*perm_store = 0;
+	}
+	
+	return 0;
+}
+```
+
+ipc_send代码如下：
+
+```
+//将“val”（如果“pg”为非空，则将“pg”与“perm”一起发送）到“toenv”。
+//此函数一直尝试直到成功。
+//除-E_IPC_NOT_RECV以外的任何错误均应调用panic()。
+//
+// Hint:
+//   Use sys_yield() to be CPU-friendly.
+//   If 'pg' is null, pass sys_ipc_try_send a value that it will understand
+//   as meaning "no page".  (Zero is not the right value.)
+void
+ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
+{
+	// LAB 4: Your code here.
+	int32_t retval = -1;
+	while (retval != 0)
+	{
+		if(pg != NULL)
+			retval = sys_ipc_try_send(to_env, val, pg, perm);
+		else 
+			retval = sys_ipc_try_send(to_env, val, (void*)UTOP, perm);
+
+		if(retval != -E_IPC_NOT_RECV && retval != 0)
+			panic("Receving wrong return value of sys_ipc_try_send");
+
+        sys_yield();
+	}
+}
+```
