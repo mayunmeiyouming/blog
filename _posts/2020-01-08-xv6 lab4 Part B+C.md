@@ -55,6 +55,13 @@ static int sys_env_set_pgfault_upcall(envid_t envid, void *func)
 }
 ```
 
+`kern/syscall.c syscall`增加代码：
+
+```
+case SYS_env_set_pgfault_upcall:
+	return sys_env_set_pgfault_upcall(a1, (void*)a2);
+```
+
 #### 用户环境中的正常堆栈和异常堆栈
 
 在正常执行期间，JOS中的用户环境将在普通用户堆栈上运行：其`ESP`寄存器开始指向`USTACKTOP`，而其推送的堆栈数据位于`USTACKTOP-PGSIZE`和`USTACKTOP-1`（含）之间。但是，当在用户模式下发生页面错误时，内核将在另一个堆栈（即用户异常堆栈）上运行指定的用户级页面错误处理程序。本质上，我们将使JOS内核代表用户环境实现自动`堆栈切换`，这与x86处理器已经在从用户模式转换到内核模式时已经代表JOS实现堆栈切换的方式几乎相同！
@@ -206,10 +213,11 @@ void set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 		// First time through!
 		// LAB 4: Your code here.
 		envid_t id = sys_getenvid();
-		if ((r = sys_page_alloc(id, (void *) (UXSTACKTOP - PGSIZE), PTE_W | PTE_U | PTE_P)) < 0 ||
-			(r = sys_env_set_pgfault_upcall(id, _pgfault_upcall)) < 0) {
+		if ((r = sys_page_alloc(id, (void *) (UXSTACKTOP - PGSIZE), PTE_W | PTE_U | PTE_P)) < 0)
 			panic("sys_page_alloc: %e", r);
-		}
+		
+		if((r = sys_env_set_pgfault_upcall(id, _pgfault_upcall)) < 0)
+			panic("sys_env_set_pgfault_upcall: %e", r);
 	}
 
 	// Save handler pointer for assembly to call.
@@ -302,6 +310,8 @@ static void pgfault(struct UTrapframe *utf)
 
 }
 ```
+
+注意取消注释
 
 duppage代码如下：
 
