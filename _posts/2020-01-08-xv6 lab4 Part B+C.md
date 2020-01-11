@@ -627,46 +627,41 @@ static int sys_ipc_recv(void *dstva)
 //		current environment's address space.
 //	-E_NO_MEM if there's not enough memory to map srcva in envid's
 //		address space.
-static int sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
+static int
+sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	struct Env* env;
-	if(envid2env(envid, &env, false) < 0)
-		return -E_BAD_ENV;
-	
-	if(!(env->env_ipc_recving))
+    envid_t src_envid = sys_getenvid(); 
+    struct Env *dst_e;
+	//	-E_BAD_ENV if environment envid doesn't currently exist.
+	//		(No need to check permissions.)
+    if (envid2env(envid, &dst_e, 0) < 0) {
+        return -E_BAD_ENV;
+    }
+
+	//	-E_IPC_NOT_RECV if envid is not currently blocked in sys_ipc_recv,
+	//		or another environment managed to send first.
+    if (!(dst_e->env_ipc_recving)) {
 		return -E_IPC_NOT_RECV;
-
-	env->env_ipc_perm = 0;
-	env->env_ipc_from = curenv->env_id;
-	env->env_ipc_value = value;
-
-	if (srcva < UTOP && (env->env_ipc_dstva) < UTOP) {
-		if((int)srcva % PGSIZE != 0)
-			return -E_INVAL;
-
-		if((~perm) & (PTE_U | PTE_P))
-			return -E_INVAL;
-
-		pte_t* pte_addr = NULL;
-		struct PageInfo* page = NULL;
-		page = page_lookup(curenv->env_pgdir, srcva, &pte_addr);
-		if(page == NULL)
-			return -E_INVAL;
-
-		if ((perm & PTE_W) && !((*pte_addr) & PTE_W))
-			-E_INVAL;
-		
-		int error_code;
-		if((error_code = page_insert(env->env_pgdir, page, env->env_ipc_dstva, perm)) < 0)
-			return error_code;
-		env->env_ipc_perm = perm;
 	}
 
-	env->env_ipc_recving = 0;
-	env->env_tf.tf_regs.reg_eax = 0;
-	env->env_status = ENV_RUNNABLE;
-	return 0;
+	dst_e->env_ipc_from = src_envid;
+    dst_e->env_ipc_value = value;
+    dst_e->env_ipc_perm = 0;
+
+    if ((uintptr_t)srcva < UTOP && ((uintptr_t)dst_e->env_ipc_dstva) < UTOP) {
+		//sys_page_map可以检查地址是否对齐，也能检查权限
+        int r = sys_page_map(src_envid, srcva, envid, (void *)dst_e->env_ipc_dstva, perm);
+        if (r < 0) 
+			return r;
+        dst_e->env_ipc_perm = perm;
+    }
+    
+    dst_e->env_status = ENV_RUNNABLE;
+    // 系统调用的返回值，设置在%eax
+    dst_e->env_tf.tf_regs.reg_eax = 0;
+    dst_e->env_ipc_recving = false;
+    return 0;
 }
 ```
 
@@ -685,7 +680,8 @@ ipc_recv代码如下：
 //   使用“thisenv”发现值和发送者。
 //   如果'pg'为null，则向sys_ipc_recv传递一个被理解为“no page”的值。 
 //  （0不是正确的值，因为这是映射页面的完全有效的位置。）
-int32_t ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
+int32_t
+ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
 {
 	// LAB 4: Your code here.
     int r;
