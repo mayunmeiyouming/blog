@@ -212,12 +212,11 @@ void set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 	if (_pgfault_handler == 0) {
 		// First time through!
 		// LAB 4: Your code here.
-		envid_t id = sys_getenvid();
-		if ((r = sys_page_alloc(id, (void *) (UXSTACKTOP - PGSIZE), PTE_W | PTE_U | PTE_P)) < 0)
+		if ((r = sys_page_alloc(thisenv->env_id, (void *) (UXSTACKTOP - PGSIZE), PTE_W | PTE_U | PTE_P)) < 0)
 			panic("sys_page_alloc: %e", r);
 		
-		if((r = sys_env_set_pgfault_upcall(id, _pgfault_upcall)) < 0)
-			panic("sys_env_set_pgfault_upcall: %e", r);
+		if((r = sys_env_set_pgfault_upcall(thisenv->env_id, _pgfault_upcall)) < 0)
+			panic("sys_env_set_pgfault_upcall: %e", r);	
 	}
 
 	// Save handler pointer for assembly to call.
@@ -307,6 +306,10 @@ static void pgfault(struct UTrapframe *utf)
 	memmove((void*)PFTEMP, (void*)start_addr, PGSIZE);
 	if((r = sys_page_map(0, (void*)PFTEMP, 0, (void*)start_addr, PTE_W | PTE_U | PTE_P)) < 0)
 		panic("Page Map Failed: %e", r);
+	
+	if ((r = sys_page_unmap(0, PFTEMP)) != 0) {
+        panic("pgfault: %e", r);
+    }
 
 }
 ```
@@ -322,10 +325,8 @@ static int duppage(envid_t envid, unsigned pn)
 
 	// LAB 4: Your code here.
 	//panic("duppage not implemented");
-	uintptr_t* va = (void *) (pn * PGSIZE);
+	void* va = (void *) (pn * PGSIZE);
 	pte_t pte = uvpt[PGNUM(va)];
-	if(!(pte & PTE_P))
-		return -1;
 
 	if((pte & PTE_W) || (pte & PTE_COW))
 	{
@@ -578,13 +579,11 @@ sys_ipc_recv代码如下：
 static int sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-    if ((uintptr_t) dstva < UTOP && ((uintptr_t)dstva) % PGSIZE != 0) {
+    if ((uintptr_t) dstva < UTOP && PGOFF(dstva) != 0) {
 		return -E_INVAL;
 	}
 		
-	if((uintptr_t)dstva < UTOP)
-		curenv->env_ipc_dstva = dstva;
-	
+	curenv->env_ipc_dstva = dstva;
 	curenv->env_ipc_recving = true;
 	curenv->env_status = ENV_NOT_RUNNABLE;
 
