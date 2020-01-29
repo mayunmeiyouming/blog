@@ -59,7 +59,8 @@ static int sys_env_set_pgfault_upcall(envid_t envid, void *func)
 
 ```
 case SYS_env_set_pgfault_upcall:
-	return sys_env_set_pgfault_upcall(a1, (void*)a2);
+	ret = sys_env_set_pgfault_upcall(a1, (void*)a2);
+	break;
 ```
 
 #### 用户环境中的正常堆栈和异常堆栈
@@ -387,6 +388,8 @@ fork(void)
 }
 ```
 
+到这里可以通过Part B的测试了
+
 ## Part C: 抢占式多任务和进程间通信（IPC）
 
 ### 时钟中断和抢占
@@ -495,6 +498,13 @@ kernel panic on CPU 0 at kern/trap.c:310: assertion failed: !(read_eflags() & FL
 SETGATE(idt[T_PGFLT], 0, GD_KT, &th_pgflt, 0);
 ```
 
+注释掉`kern/shed.c shed_halt()`的下列部分
+
+```
+		// Uncomment the following line after completing exercise 13
+		"sti\n"
+```
+
 
 #### 处理时钟中断
 
@@ -517,6 +527,8 @@ SETGATE(idt[T_PGFLT], 0, GD_KT, &th_pgflt, 0);
         return;
     }
 ```
+
+现在应该能得到`65/80`
 
 ### 进程间通信（IPC）
 
