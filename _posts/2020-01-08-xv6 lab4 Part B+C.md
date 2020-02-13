@@ -59,8 +59,8 @@ static int sys_env_set_pgfault_upcall(envid_t envid, void *func)
 
 ```
 case SYS_env_set_pgfault_upcall:
-	ret = sys_env_set_pgfault_upcall(a1, (void*)a2);
-	break;
+    ret = sys_env_set_pgfault_upcall(a1, (void*)a2);
+    break;
 ```
 
 #### 用户环境中的正常堆栈和异常堆栈
@@ -110,49 +110,49 @@ page_fault_handler的代码如下：
 void
 page_fault_handler(struct Trapframe *tf)
 {
-	uint32_t fault_va;
+    uint32_t fault_va;
 
-	// Read processor's CR2 register to find the faulting address
-	fault_va = rcr2();
+    // Read processor's CR2 register to find the faulting address
+    fault_va = rcr2();
 
-	// Handle kernel-mode page faults.
+    // Handle kernel-mode page faults.
 
-	// LAB 3: Your code here.
-	if ((tf->tf_cs & 3) == 0)
-		panic("Page Fault in Kernel-Mode at %08x.\n", fault_va);
+    // LAB 3: Your code here.
+    if ((tf->tf_cs & 3) == 0)
+        panic("Page Fault in Kernel-Mode at %08x.\n", fault_va);
 
-	// LAB 4: Your code here.
-	if (curenv->env_pgfault_upcall != NULL)
-	{
-		uintptr_t va;
+    // LAB 4: Your code here.
+    if (curenv->env_pgfault_upcall != NULL)
+    {
+        uintptr_t va;
 
-		if (tf->tf_esp > UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP) {
-			va = tf->tf_esp - 4 - sizeof(struct UTrapframe);   //每个栈帧之间留空
-		} else {
-			va = UXSTACKTOP - sizeof(struct UTrapframe);
-		}
+        if (tf->tf_esp > UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP) {
+            va = tf->tf_esp - 4 - sizeof(struct UTrapframe);   //每个栈帧之间留空
+        } else {
+            va = UXSTACKTOP - sizeof(struct UTrapframe);
+        }
 
-		user_mem_assert(curenv, (void *) va, sizeof(struct UTrapframe), PTE_W | PTE_U | PTE_P);
+        user_mem_assert(curenv, (void *) va, sizeof(struct UTrapframe), PTE_W | PTE_U | PTE_P);
 
-		struct UTrapframe *utf = (struct UTrapframe *) (va);
-		utf->utf_fault_va = fault_va;
-		utf->utf_err = tf->tf_err;
-		utf->utf_regs = tf->tf_regs;
-		utf->utf_eip = tf->tf_eip;
-		utf->utf_eflags = tf->tf_eflags;
-		utf->utf_esp = tf->tf_esp;
+        struct UTrapframe *utf = (struct UTrapframe *) (va);
+        utf->utf_fault_va = fault_va;
+        utf->utf_err = tf->tf_err;
+        utf->utf_regs = tf->tf_regs;
+        utf->utf_eip = tf->tf_eip;
+        utf->utf_eflags = tf->tf_eflags;
+        utf->utf_esp = tf->tf_esp;
 
-		tf->tf_esp = va;
-		tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
-		env_run(curenv);
-	}
+        tf->tf_esp = va;
+        tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
+        env_run(curenv);
+    }
 	
 
-	// Destroy the environment that caused the fault.
-	cprintf("[%08x] user fault va %08x ip %08x\n",
-		curenv->env_id, fault_va, tf->tf_eip);
-	print_trapframe(tf);
-	env_destroy(curenv);
+    // Destroy the environment that caused the fault.
+    cprintf("[%08x] user fault va %08x ip %08x\n",
+	    curenv->env_id, fault_va, tf->tf_eip);
+    print_trapframe(tf);
+    env_destroy(curenv);
 }
 ```
 
