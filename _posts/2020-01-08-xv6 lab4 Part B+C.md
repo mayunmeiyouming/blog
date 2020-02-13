@@ -166,7 +166,6 @@ page_fault_handler(struct Trapframe *tf)
 
 在`lib/pfentry.S`中实现`_pgfault_upcall`例程。有趣的是返回到导致页面错误的用户代码中的原始点。你将直接返回那里，而无需返回内核。困难的部分是同时切换堆栈并重新加载EIP。
 
-
 ```
 	// LAB 4: Your code here.
 	// 这里将异常栈存储的trap time eip存入发生异常的栈的esp-4处。
