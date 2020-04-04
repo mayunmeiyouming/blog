@@ -7129,6 +7129,7 @@ td.visible-print {
 /**
  * 网站变灰，4月4号
  */
+/*
 html {
   -webkit-filter: grayscale(100%);
   -moz-filter: grayscale(100%);
@@ -7137,3 +7138,4 @@ html {
   filter:progid:DXImageTransform.Microsoft.BasicImage(grayscale=1);
   _filter:none;
 }
+*/
