@@ -2,10 +2,10 @@
 name: BLOG
 email: 2510764133@qq.com
 author: huangwei
-url: https://mayunmeiyouming.gitee.io/
+url: https://mayunmeiyouming.gitee.io
 resume_site: https://mayunmeiyouming.gitee.io/
 github: https://mayunmeiyouming.gitee.io
-baseurl: ""
+baseurl: "/"
 description: 学而不思则罔，思而不学则殆。test2
 meta_description: linux;C;Java;服务器
 motto: It's our wits that make us men.
