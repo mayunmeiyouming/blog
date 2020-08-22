@@ -6,10 +6,10 @@ url: https://mayunmeiyouming.gitee.io/
 resume_site: https://mayunmeiyouming.gitee.io/
 github: https://mayunmeiyouming.gitee.io
 baseurl: "/"
-description: 学而不思则罔，思而不学则殆。test
+description: 学而不思则罔，思而不学则殆。test2
 meta_description: linux;C;Java;服务器
 motto: It's our wits that make us men.
-banner: 学而不思则罔，思而不学则殆。test
+banner: 学而不思则罔，思而不学则殆。test2
 
 #permalink: /:categories/:year/:month/:day/:title/
 permalink: /:year/:month/:day/:title/
