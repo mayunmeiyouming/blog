@@ -6329,6 +6329,9 @@ hr {
 .docs-header h1 {
   color: #fff;
 }
+.docs-header h2 {
+  color: #fff;
+}
 .docs-header p {
   font-weight: 300;
   line-height: 1.5;
