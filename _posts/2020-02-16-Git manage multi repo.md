@@ -132,3 +132,11 @@ $ git push origin master
 # Git只输入一次密码
 
 git config --global credential.helper store
+
+# Git连接上游仓库
+
+```
+git remote add upstream url
+git remote update upstream --prune
+git pull upstream master
+```
