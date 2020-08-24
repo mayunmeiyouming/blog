@@ -9,7 +9,7 @@ tag: Git
 * content
 {:toc}
 
-> 翻译
+# Git多库同步管理
 
 场景:一个项目同时连接两个服务器
 
@@ -128,3 +128,7 @@ $ git push origin master
 ```
 
 [Git学习平台](https://learngitbranching.js.org/)
+
+# Git只输入一次密码
+
+git config --global credential.helper store
