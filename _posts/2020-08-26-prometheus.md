@@ -54,6 +54,7 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ['192.168.89.30:8080']
+  # 采集 consul 监控数据
   - job_name: 'consul-prometheus'
     consul_sd_configs:
     - server: '172.23.0.10:8500'
