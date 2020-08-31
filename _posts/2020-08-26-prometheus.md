@@ -9,7 +9,7 @@ tag: Prometheus
 * content
 {:toc}
 
-## 安装 Prometheus
+## 一、安装 Prometheus
 
 ```
 docker run --name=prometheus -d -p 9090:9090 --network host \
@@ -94,7 +94,7 @@ groups:
 
 ```
 
-## Golang 嵌入 Prometheus metrics
+## 二、Golang 嵌入 Prometheus metrics
 
 ```
 package main
@@ -176,7 +176,7 @@ func main() {
 }
 ```
 
-## 安装 AlterManager
+## 三、安装 AlterManager
 
 ```
 docker run -d -p 9093:9093 \
