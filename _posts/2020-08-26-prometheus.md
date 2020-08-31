@@ -12,7 +12,10 @@ tag: Prometheus
 ## 安装 Prometheus
 
 ```
-docker run --name=prometheus -d -p 9090:9090 --network host -v /home/huangw/桌面/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml -v /home/huangw/桌面/prometheus/rules.yml:/etc/prometheus/rules.yml prom/prometheus --config.file=/etc/prometheus/prometheus.yml --web.enable-lifecycle
+docker run --name=prometheus -d -p 9090:9090 --network host \
+-v /home/huangw/桌面/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml \
+-v /home/huangw/桌面/prometheus/rules.yml:/etc/prometheus/rules.yml prom/prometheus \
+--config.file=/etc/prometheus/prometheus.yml --web.enable-lifecycle
 ```
 
 --network host 是指定网络模式为 host
