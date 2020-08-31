@@ -17,6 +17,78 @@ docker run --name=prometheus -d -p 9090:9090 --network host -v /home/huangw/桌�
 
 --network host 是指定网络模式为 host
 
+prometheus.yml
+
+```
+global:
+  scrape_interval:     5s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 5s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+  scrape_timeout: 5s
+
+# Alertmanager 的配置，如果没有配置它，可以去掉这个
+alerting:
+  alertmanagers:
+    - static_configs:
+      - targets: ['192.168.89.30:9093']
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  - /etc/prometheus/rules.yml
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+  # 采集node exporter监控数据
+  - job_name: 'node'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['192.168.89.30:9100']
+  - job_name: 'goTest'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['192.168.89.30:8080']
+  - job_name: 'consul-prometheus'
+    consul_sd_configs:
+    - server: '172.23.0.10:8500'
+      services: []
+
+```
+
+rules.yml
+
+```
+groups:
+  - name: quick_search
+    rules:
+      - alert: QPS
+        expr: sum(irate(quick_search_request_duration_seconds_count[1m])) > 5000
+        for: 1m
+        labels:
+          status: warning
+        annotations:
+          summary: "QPS过高"
+          description: "QPS过高"
+      - alert: 时延
+        expr: quick_search_request_duration_seconds_sum / quick_search_request_duration_seconds_count > 1
+        for: 1m
+        labels:
+          status: warning
+        annotations:
+          summary: "时延过高"
+          description: "时延过高"
+      - alert: 错误率
+        expr: (quick_search_request_duration_seconds_count - quick_search_request_duration_seconds_count{code="200"}) / quick_search_request_duration_seconds_count > 0.1
+        for: 1m
+        labels:
+          status: warning
+        annotations:
+          summary: "错误率过高"
+          description: "错误率过高"
+
+```
+
 ## Golang 嵌入 Prometheus metrics
 
 ```
@@ -99,6 +171,47 @@ func main() {
 }
 ```
 
+## 安装 AlterManager
+
+```
+docker run -d -p 9093:9093 \
+--name alertmanager \
+-v /home/huangw/桌面/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml \
+prom/alertmanager
+```
+
+alertmanager.yml
+
+```
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: smtp.qq.com:465
+  smtp_from: email-address
+  smtp_auth_username: username
+  smtp_auth_identity: username
+  smtp_auth_password: password
+  smtp_require_tls: false
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'email'
+receivers:
+- name: 'email'
+  email_configs:
+    - to: 'email-address'
+      send_resolved: true
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'dev', 'instance']
+
+```
+
 [Prometheus 中文文档](https://www.prometheus.wang/)
 [玩转PROMETHEUS(1)–第1个例子](http://vearne.cc/archives/11085)
-
+[从零搭建Prometheus监控报警系统](https://www.cnblogs.com/chenqionghe/p/10494868.html)
