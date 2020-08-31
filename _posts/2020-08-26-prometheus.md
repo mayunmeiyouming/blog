@@ -217,6 +217,6 @@ inhibit_rules:
 
 ```
 
-[Prometheus 中文文档](https://www.prometheus.wang/)
-[玩转PROMETHEUS(1)–第1个例子](http://vearne.cc/archives/11085)
-[从零搭建Prometheus监控报警系统](https://www.cnblogs.com/chenqionghe/p/10494868.html)
+1. [Prometheus 中文文档](https://www.prometheus.wang/)
+2. [玩转PROMETHEUS(1)–第1个例子](http://vearne.cc/archives/11085)
+3. [从零搭建Prometheus监控报警系统](https://www.cnblogs.com/chenqionghe/p/10494868.html)
