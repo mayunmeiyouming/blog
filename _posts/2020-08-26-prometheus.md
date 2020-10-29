@@ -11,7 +11,7 @@ tag: Prometheus
 
 ## 一、安装 Prometheus
 
-```
+```bash
 docker run --name=prometheus -d -p 9090:9090 --network host \
 -v /home/huangw/桌面/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml \
 -v /home/huangw/桌面/prometheus/rules.yml:/etc/prometheus/rules.yml prom/prometheus \
@@ -24,7 +24,7 @@ docker run --name=prometheus -d -p 9090:9090 --network host \
 
 prometheus.yml
 
-```
+```yml
 global:
   scrape_interval:     5s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
   evaluation_interval: 5s # Evaluate rules every 15 seconds. The default is every 1 minute.
@@ -64,7 +64,7 @@ scrape_configs:
 
 rules.yml
 
-```
+```yml
 groups:
   - name: quick_search
     rules:
@@ -97,89 +97,89 @@ groups:
 
 ## 二、Golang 嵌入 Prometheus metrics
 
-```
+```go
 package main
 
 import (
-	"flag"
-	"log"
-	"net/http"
+  "flag"
+  "log"
+  "net/http"
 
-	"github.com/go-chi/chi"
+  "github.com/go-chi/chi"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	weavework_middleware "github.com/weaveworks/common/middleware"  // v0.0.0-20200820123129-280614068c5e
+  "github.com/prometheus/client_golang/prometheus"
+  "github.com/prometheus/client_golang/prometheus/promhttp"
+  weavework_middleware "github.com/weaveworks/common/middleware"  // v0.0.0-20200820123129-280614068c5e
 )
 
 var (
-	addr = flag.String("listen-address", ":8080", "The address to listen on for HTTP requests.")
+  addr = flag.String("listen-address", ":8080", "The address to listen on for HTTP requests.")
 )
 
 var (
-	// RequestDuration ...
-	RequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "request_duration_seconds",
-		Help:    "The HTTP request latencies in seconds.",
-		Buckets: nil,
-	}, []string{"Method", "route", "code", "isWS"})
-	// HTTPReqTotal ...
-	HTTPReqTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "requests_total",
-		Help: "Total number of HTTP requests made.",
-	}, []string{"Method", "route"})
-	// RequestBodySize ...
-	RequestBodySize = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "request_body_size",
-			Help:    "The HTTP request latencies in seconds.",
-			Buckets: nil,
-		}, []string{"Method", "route"})
-	// ResponseBodySize ...
-	ResponseBodySize = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "response_body_size",
-		Help:    "The HTTP request latencies in seconds.",
-		Buckets: nil,
-	}, []string{"Method", "route"})
+  // RequestDuration ...
+  RequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+    Name:    "request_duration_seconds",
+    Help:    "The HTTP request latencies in seconds.",
+    Buckets: nil,
+  }, []string{"Method", "route", "code", "isWS"})
+  // HTTPReqTotal ...
+  HTTPReqTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+    Name: "requests_total",
+    Help: "Total number of HTTP requests made.",
+  }, []string{"Method", "route"})
+  // RequestBodySize ...
+  RequestBodySize = prometheus.NewHistogramVec(
+    prometheus.HistogramOpts{
+      Name:    "request_body_size",
+      Help:    "The HTTP request latencies in seconds.",
+      Buckets: nil,
+    }, []string{"Method", "route"})
+  // ResponseBodySize ...
+  ResponseBodySize = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+    Name:    "response_body_size",
+    Help:    "The HTTP request latencies in seconds.",
+    Buckets: nil,
+  }, []string{"Method", "route"})
 )
 
 func init() {
-	prometheus.MustRegister(
-		RequestDuration,
-		HTTPReqTotal,
-		RequestBodySize,
-		ResponseBodySize,
-	)
+  prometheus.MustRegister(
+    RequestDuration,
+    HTTPReqTotal,
+    RequestBodySize,
+    ResponseBodySize,
+  )
 }
 
 func main() {
-	flag.Parse()
+  flag.Parse()
 
-	router := chi.NewRouter()
+  router := chi.NewRouter()
 
-	// Expose the registered metrics via HTTP.
-	router.Handle("/metrics", promhttp.HandlerFor(
-		prometheus.DefaultGatherer,
-		promhttp.HandlerOpts{
-			// Opt into OpenMetrics to support exemplars.
-			EnableOpenMetrics: true,
-		},
-	))
+  // Expose the registered metrics via HTTP.
+  router.Handle("/metrics", promhttp.HandlerFor(
+    prometheus.DefaultGatherer,
+    promhttp.HandlerOpts{
+      // Opt into OpenMetrics to support exemplars.
+      EnableOpenMetrics: true,
+    },
+  ))
 
-	instrument := weavework_middleware.Instrument{
-		Duration:         RequestDuration,
-		InflightRequests: HTTPReqTotal,
-		ResponseBodySize: ResponseBodySize,
-		RequestBodySize:  RequestBodySize,
-	}
+  instrument := weavework_middleware.Instrument{
+    Duration:         RequestDuration,
+    InflightRequests: HTTPReqTotal,
+    ResponseBodySize: ResponseBodySize,
+    RequestBodySize:  RequestBodySize,
+  }
 
-	log.Fatal(http.ListenAndServe(*addr, instrument.Wrap(router)))
+  log.Fatal(http.ListenAndServe(*addr, instrument.Wrap(router)))
 }
 ```
 
 ## 三、安装 AlterManager
 
-```
+```bash
 docker run -d -p 9093:9093 \
 --name alertmanager \
 -v /home/huangw/桌面/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml \
@@ -188,7 +188,7 @@ prom/alertmanager
 
 alertmanager.yml
 
-```
+```yml
 global:
   resolve_timeout: 5m
   smtp_smarthost: smtp.qq.com:465

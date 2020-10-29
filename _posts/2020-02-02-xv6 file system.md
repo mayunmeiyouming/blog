@@ -20,6 +20,7 @@ tag: xv6
 ## serve_init函数
 
 其中`serve_init`函数完成的功能比较简单，就是初始化`opentab`数组。一共完成了两个赋值：
+
 1. `opentab[i].o_fileid = i`;
 2. `opentab[i].o_fd = (struct Fd*) va`;
 
