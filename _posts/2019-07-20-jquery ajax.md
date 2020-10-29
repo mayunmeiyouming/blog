@@ -9,38 +9,37 @@ tag: Jquery
 * content
 {:toc}
 
-
 ### JQuery提交普通表单,使用serialize()
 
 使用`fastjson.jar`对返回的数据转换成json数据
 
 form表单:
 
-```
+```html
 <form id="form">
-	<input type="number" name="page_init" id="page_init" min="0" step="1" max="26">
-	<input type="number" name="page_end" id="page_end" min="0" step="1" max="26">
-	<input type="button" id="removeButton" value="remove" >
+    <input type="number" name="page_init" id="page_init" min="0" step="1" max="26">
+    <input type="number" name="page_end" id="page_end" min="0" step="1" max="26">
+    <input type="button" id="removeButton" value="remove" >
 </form>
 ```
 
 JQuery提交数据:
 
-```
+```js
 $.ajax({
-	url: '<%= request.getContextPath() %>/pdfRemove',
-	type: 'post',
-	cache: false,
-	data: $("#form").serialize(),
-	dataType: "json",
-	processData: false,
+    url: '<%= request.getContextPath() %>/pdfRemove',
+    type: 'post',
+    cache: false,
+    data: $("#form").serialize(),
+    dataType: "json",
+    processData: false,
 
-	success: function(data){
-		alert(data.status);
-	},
-	error: function(err){
-		alert("error");
-	}
+    success: function(data){
+        alert(data.status);
+    },
+    error: function(err){
+        alert("error");
+    }
 });
 ```
 
@@ -50,7 +49,7 @@ $.ajax({
 
 Servlet处理数据:
 
-```
+```js
 JSONObject jsonObject = new JSONObject();
 request.setCharacterEncoding("utf-8");
 HttpSession se = request.getSession();
@@ -71,39 +70,39 @@ response.getOutputStream().write(jsonObject.toString().getBytes("utf-8"));
 
 form表单:
 
-```
+```html
 <form>
-	<input type="file" name="file" id="file" >
-	<input type="button" id="button" value="submit" >
+    <input type="file" name="file" id="file" >
+    <input type="button" id="button" value="submit" >
 </form>
 ```
 
 JQuery提交数据:
 
-```
+```js
 var formData = new FormData();
 formData.append('file', $('#file')[0].files[0]);
 $.ajax({
-	url: '',
-	type: 'post',
+    url: '',
+    type: 'post',
     cache: false,
     processData: false,
     contentType: false,
-	data: formData,
-	dataType: "json",
-	success: function(data) {
-			if (data[0].errorFileType == ""){
-				$("#page_end").attr("value", data[0].count);
-				$("#page_end").attr("max", data[0].count);
-				$("#page_init").attr("max", data[0].count);
-				$("#removeButton").removeAttr("style");
-			} else {
-				alert(data[0].errorFileType);
-			}				
-	},
-	error: function(){
-	           alert('未知错误');
-	}
+    data: formData,
+    dataType: "json",
+    success: function(data) {
+        if (data[0].errorFileType == ""){
+            $("#page_end").attr("value", data[0].count);
+            $("#page_end").attr("max", data[0].count);
+            $("#page_init").attr("max", data[0].count);
+            $("#removeButton").removeAttr("style");
+        } else {
+            alert(data[0].errorFileType);
+        }
+    },
+    error: function(){
+        alert('未知错误');
+    }
 });
 ```
 
@@ -113,48 +112,48 @@ $.ajax({
 
 Servlet处理数据:
 
-```
+```js
 if (ServletFileUpload.isMultipartContent(request)) {
-	ServletFileUpload upload = new ServletFileUpload(new DiskFileItemFactory());
-	upload.setHeaderEncoding("UTF-8");
-	List<FileItem> fileItemList;
-	try {
-		fileItemList = upload.parseRequest(request);
-		for(FileItem fileItem: fileItemList) {
-			if (fileItem.isFormField()) {
-				System.out.println(fileItem.getFieldName() + "," + fileItem.getString());
-			} else {
-				System.out.println(fileItem.getFieldName());
-				String path = this.getInitParameter("path") + fileItem.getName();
-				int pages = Pdf.calculatePages(fileItem.getInputStream());
-							
-				File file = new File(path);
-				if (!file.exists()) {
-					fileItem.write(file);
-				}
-						    
-				HttpSession session = request.getSession(true);
-				session.setAttribute("filePath", path);
-						    
-							
-				response.setCharacterEncoding("utf-8");
-				JSONObject jsonObject = new JSONObject();
-				jsonObject.put("count", pages);
-				jsonObject.put("errorFileType", "");
-							    
-				JSONArray jsonArray = new JSONArray();
-				jsonArray.add(jsonObject);
-				System.out.println(jsonArray.toJSONString());
-				response.getOutputStream().write(jsonArray.toString().getBytes("utf-8"));
-			}
-		}
-	} catch (FileUploadException e) {
-		e.printStackTrace();
-	} catch (Exception e) {
-		e.printStackTrace();
-	}
+    ServletFileUpload upload = new ServletFileUpload(new DiskFileItemFactory());
+    upload.setHeaderEncoding("UTF-8");
+    List<FileItem> fileItemList;
+    try {
+        fileItemList = upload.parseRequest(request);
+        for(FileItem fileItem: fileItemList) {
+            if (fileItem.isFormField()) {
+                System.out.println(fileItem.getFieldName() + "," + fileItem.getString());
+            } else {
+                System.out.println(fileItem.getFieldName());
+                String path = this.getInitParameter("path") + fileItem.getName();
+                int pages = Pdf.calculatePages(fileItem.getInputStream());
+
+                File file = new File(path);
+                if (!file.exists()) {
+                    fileItem.write(file);
+                }
+
+                HttpSession session = request.getSession(true);
+                session.setAttribute("filePath", path);
+
+
+                response.setCharacterEncoding("utf-8");
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.put("count", pages);
+                jsonObject.put("errorFileType", "");
+
+                JSONArray jsonArray = new JSONArray();
+                jsonArray.add(jsonObject);
+                System.out.println(jsonArray.toJSONString());
+                response.getOutputStream().write(jsonArray.toString().getBytes("utf-8"));
+            }
+        }
+    } catch (FileUploadException e) {
+        e.printStackTrace();
+    } catch (Exception e) {
+        e.printStackTrace();
+   }
 } else {
-			
+
 }
 ```
 
@@ -162,7 +161,7 @@ if (ServletFileUpload.isMultipartContent(request)) {
 
 JQuery提交数据:
 
-```
+```js
 var formData = new FormData();
 formData.append('file', $('#file')[0].files[0]);
 formData.append('name', $('#name').val());

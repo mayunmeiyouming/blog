@@ -13,7 +13,7 @@ tag: Springmvc
 
 web.xml
 
-```
+```xml
 <!DOCTYPE web-app PUBLIC
  "-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN"
  "http://java.sun.com/dtd/web-app_2_3.dtd" >
@@ -35,22 +35,22 @@ web.xml
 
 DispatcherServlet-servlet.xml
 
-```
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:mvc="http://www.springframework.org/schema/mvc"
        xmlns:context="http://www.springframework.org/schema/context"
        xmlns:aop="http://www.springframework.org/schema/aop" xmlns:tx="http://www.springframework.org/schema/tx"
        xsi:schemaLocation="http://www.springframework.org/schema/beans
-		http://www.springframework.org/schema/beans/spring-beans-3.2.xsd
-		http://www.springframework.org/schema/mvc
-		http://www.springframework.org/schema/mvc/spring-mvc-3.2.xsd
-		http://www.springframework.org/schema/context
-		http://www.springframework.org/schema/context/spring-context-3.2.xsd
-		http://www.springframework.org/schema/aop
-		http://www.springframework.org/schema/aop/spring-aop-3.2.xsd
-		http://www.springframework.org/schema/tx
-		http://www.springframework.org/schema/tx/spring-tx-3.2.xsd">
+        http://www.springframework.org/schema/beans/spring-beans-3.2.xsd
+        http://www.springframework.org/schema/mvc
+        http://www.springframework.org/schema/mvc/spring-mvc-3.2.xsd
+        http://www.springframework.org/schema/context
+        http://www.springframework.org/schema/context/spring-context-3.2.xsd
+        http://www.springframework.org/schema/aop
+        http://www.springframework.org/schema/aop/spring-aop-3.2.xsd
+        http://www.springframework.org/schema/tx
+        http://www.springframework.org/schema/tx/spring-tx-3.2.xsd">
 
 
     <!-- 配置url映射 -->
@@ -73,7 +73,7 @@ DispatcherServlet-servlet.xml
 
 UserController
 
-```
+```java
 package Controller;
 
 import org.springframework.web.servlet.ModelAndView;
@@ -97,7 +97,7 @@ public class UserController implements Controller {
 
 #### BeanNameUrlHandlerMapping
 
-```
+```xml
 <bean class="org.springframework.web.servlet.handler.BeanNameUrlHandlerMapping"></bean>
 
 <bean name="/user.do" class="Controller.UserController" ></bean>
@@ -105,7 +105,7 @@ public class UserController implements Controller {
 
 #### SimpleUrlHandlerMapping
 
-```
+```xml
 <bean class="org.springframework.web.servlet.handler.SimpleUrlHandlerMapping">
     <property name="mappings">
         <props>
@@ -123,13 +123,13 @@ public class UserController implements Controller {
 
 控制器调用handleRequest方法,返回ModelAndView
 
-```
+```xml
 <bean class="org.springframework.web.servlet.mvc.SimpleControllerHandlerAdapter"></bean>
 ```
 
 控制器实现:
 
-```
+```java
 package Controller;
 
 import org.springframework.web.servlet.ModelAndView;
@@ -151,13 +151,13 @@ public class UserController implements Controller {
 
 #### HttpRequestHandlerAdapter
 
-```
+```xml
 <bean class="org.springframework.web.servlet.mvc.HttpRequestHandlerAdapter"></bean>
 ```
 
 类:
 
-```
+```java
 public class HttpController implements HttpRequestHandler {
     @Override
     public void handleRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
@@ -171,7 +171,7 @@ public class HttpController implements HttpRequestHandler {
 
 xml配置:
 
-```
+```xml
 <!-- 配置控制器 -->
 <!-- 扫描包 -->
 <context:component-scan base-package="Controller"></context:component-scan>
@@ -191,7 +191,7 @@ xml配置:
 
 Controller
 
-```
+```java
 @org.springframework.stereotype.Controller
 @RequestMapping("/user")
 public class UserController {
@@ -207,7 +207,7 @@ public class UserController {
 
 1.
 
-```
+```java
 @RequestMapping("/register")
 public String register(String username, String password) {
     System.out.println(username);
@@ -218,7 +218,7 @@ public String register(String username, String password) {
 
 2. 模型
 
-```
+```java
 @RequestMapping("/register2")
 public String register(User user) {
     System.out.println(user.getUsername());
@@ -229,7 +229,7 @@ public String register(User user) {
 
 3.
 
-```
+```java
 public class UserExt {
 
     private User user;
@@ -251,7 +251,7 @@ public class UserExt {
 }
 ```
 
-```
+```html
 <form action="/springmvc/user/register2.do">
     用户名: <input type="text" name="user.username"><br>
     密码: <input type="password" name="user.password"><br>
@@ -259,7 +259,7 @@ public class UserExt {
 </form>
 ```
 
-```
+```java
 @RequestMapping("/register2")
 public String register(UserExt userExt) {
     System.out.println(userExt);
@@ -273,7 +273,7 @@ public String register(UserExt userExt) {
 
 ### url
 
-```
+```java
 @RequestMapping("/list/{id}")
 public String list(@PathVariable int id, Model model) {
     model.addAttribute("username", "黄伟");
@@ -283,11 +283,11 @@ public String list(@PathVariable int id, Model model) {
 
 ### 转发和重定向
 
-```
+```java
 return "forward:userlist.do";
 ```
 
-```
+```java
 return "redirect:userlist.do";
 ```
 
@@ -297,7 +297,7 @@ spring5.0.8
 
 jackson包
 
-```
+```xml
 <dependency>
     <groupId>com.fasterxml.jackson.core</groupId>
     <artifactId>jackson-annotations</artifactId>
@@ -315,7 +315,7 @@ jackson包
 </dependency>
 ```
 
-```
+```java
 @RequestMapping("/save")
 @ResponseBody
 public User save(@RequestBody User user) {
@@ -325,7 +325,7 @@ public User save(@RequestBody User user) {
 }
 ```
 
-```
+```xml
 <mvc:annotation-driven />
 <!-- 配置适配器 -->
 <bean class="org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter">
@@ -345,7 +345,7 @@ public User save(@RequestBody User user) {
 
 url后面加.json或.xml
 
-```
+```xml
 <!-- 多视图 -->
     <bean class="org.springframework.web.servlet.view.ContentNegotiatingViewResolver">
         <!-- 配置支持类型 -->
@@ -381,6 +381,4 @@ url后面加.json或.xml
             </list>
         </property>
     </bean>
-```
-
 ```

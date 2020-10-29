@@ -41,23 +41,23 @@ xv6 Unix通过将父页面的所有数据复制到为孩子分配的新页面中
 
 sys_env_set_pgfault_upcall的代码如下：
 
-```
+```c
 static int sys_env_set_pgfault_upcall(envid_t envid, void *func)
 {
-	// LAB 4: Your code here.
-	//panic("sys_env_set_pgfault_upcall not implemented");
-	struct Env* e;
-	if(envid2env(envid, &e, 1) < 0) 
-		return -E_BAD_ENV;
-	e->env_pgfault_upcall = func;
-	
-	return 0;
+    // LAB 4: Your code here.
+    // panic("sys_env_set_pgfault_upcall not implemented");
+    struct Env* e;
+    if(envid2env(envid, &e, 1) < 0)
+        return -E_BAD_ENV;
+    e->env_pgfault_upcall = func;
+
+    return 0;
 }
 ```
 
 `kern/syscall.c syscall`增加代码：
 
-```
+```c
 case SYS_env_set_pgfault_upcall:
     ret = sys_env_set_pgfault_upcall(a1, (void*)a2);
     break;
@@ -77,7 +77,7 @@ JOS用户异常堆栈的大小也为一页，并且其顶部定义为虚拟地�
 
 如果没有注册页面错误处理程序，则JOS内核会像以前一样通过一条消息销毁用户环境。否则，内核将在异常堆栈上设置一个陷阱帧，该陷阱帧看起来像来自`inc/trap.h`的`struct UTrapframe`：
 
-```
+```c
                     <-- UXSTACKTOP
 trap-time esp
 trap-time eflags
@@ -106,7 +106,7 @@ fault_va            <-- %esp when handler is run
 
 page_fault_handler的代码如下：
 
-```
+```c
 void
 page_fault_handler(struct Trapframe *tf)
 {
@@ -146,11 +146,11 @@ page_fault_handler(struct Trapframe *tf)
         tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
         env_run(curenv);
     }
-	
+
 
     // Destroy the environment that caused the fault.
     cprintf("[%08x] user fault va %08x ip %08x\n",
-	    curenv->env_id, fault_va, tf->tf_eip);
+        curenv->env_id, fault_va, tf->tf_eip);
     print_trapframe(tf);
     env_destroy(curenv);
 }
@@ -166,36 +166,36 @@ page_fault_handler(struct Trapframe *tf)
 
 在`lib/pfentry.S`中实现`_pgfault_upcall`例程。有趣的是返回到导致页面错误的用户代码中的原始点。你将直接返回那里，而无需返回内核。困难的部分是同时切换堆栈并重新加载EIP。
 
-```
-	// LAB 4: Your code here.
-	// 这里将异常栈存储的trap time eip存入发生异常的栈的esp-4处。
-	// 本来打算使用jmp命令直接跳转到trap time eip处的，结果测试不能通过
-	// 有点迷
-	movl 48(%esp), %eax
-	subl $4, %eax
-	movl %eax, 48(%esp)
-	movl 40(%esp), %ebx
-	movl %ebx, (%eax)
+```c
+    // LAB 4: Your code here.
+    // 这里将异常栈存储的trap time eip存入发生异常的栈的esp-4处。
+    // 本来打算使用jmp命令直接跳转到trap time eip处的，结果测试不能通过
+    // 有点迷
+    movl 48(%esp), %eax
+    subl $4, %eax
+    movl %eax, 48(%esp)
+    movl 40(%esp), %ebx
+    movl %ebx, (%eax)
 
-	// Restore the trap-time registers.  After you do this, you
-	// can no longer modify any general-purpose registers.
-	// LAB 4: Your code here.
-	addl $8, %esp
-	popal
-	// Restore eflags from the stack.  After you do this, you can
-	// no longer use arithmetic operations or anything else that
-	// modifies eflags.
-	// LAB 4: Your code here.
-	addl $4, %esp
-	popfl
+    // Restore the trap-time registers.  After you do this, you
+    // can no longer modify any general-purpose registers.
+    // LAB 4: Your code here.
+    addl $8, %esp
+    popal
+    // Restore eflags from the stack.  After you do this, you can
+    // no longer use arithmetic operations or anything else that
+    // modifies eflags.
+    // LAB 4: Your code here.
+    addl $4, %esp
+    popfl
 
-	// Switch back to the adjusted trap-time stack.
-	// LAB 4: Your code here.
-	popl %esp
+    // Switch back to the adjusted trap-time stack.
+    // LAB 4: Your code here.
+    popl %esp
 
-	// Return to re-execute the instruction that faulted.
-	// LAB 4: Your code here.
-	ret
+    // Return to re-execute the instruction that faulted.
+    // LAB 4: Your code here.
+    ret
 ```
 
 ##### Exercise 11
@@ -204,23 +204,23 @@ Finish set_pgfault_handler() in lib/pgfault.c.
 
 set_pgfault_handler的代码如下：
 
-```
+```c
 void set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 {
-	int r;
+    int r;
 
-	if (_pgfault_handler == 0) {
-		// First time through!
-		// LAB 4: Your code here.
-		if ((r = sys_page_alloc(thisenv->env_id, (void *) (UXSTACKTOP - PGSIZE), PTE_W | PTE_U | PTE_P)) < 0)
-			panic("sys_page_alloc: %e", r);
-		
-		if((r = sys_env_set_pgfault_upcall(thisenv->env_id, _pgfault_upcall)) < 0)
-			panic("sys_env_set_pgfault_upcall: %e", r);	
-	}
+    if (_pgfault_handler == 0) {
+        // First time through!
+        // LAB 4: Your code here.
+        if ((r = sys_page_alloc(thisenv->env_id, (void *) (UXSTACKTOP - PGSIZE), PTE_W | PTE_U | PTE_P)) < 0)
+            panic("sys_page_alloc: %e", r);
 
-	// Save handler pointer for assembly to call.
-	_pgfault_handler = handler;
+        if((r = sys_env_set_pgfault_upcall(thisenv->env_id, _pgfault_upcall)) < 0)
+            panic("sys_env_set_pgfault_upcall: %e", r);
+    }
+
+    // Save handler pointer for assembly to call.
+    _pgfault_handler = handler;
 }
 ```
 
@@ -236,11 +236,11 @@ void set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 
 2. 父进程调用`sys_exofork()`创建一个子进程环境。
 
-3.	对于`UTOP`下地址空间中的每个可写或写时复制页面，父进程调用`duppage`，后者应将写时复制页面映射到子地址空间，然后重新映射到写时复制页面。它自己的地址空间。 [注意：此处的顺序（即在父进程中将页面标记为子进程，然后在父进程中标记）实际上很重要！你知道为什么吗？尝试考虑一种特殊情况，在这种情况下，颠倒顺序可能会引起麻烦。 ] `duppage`设置两个`PTE`，以使该页面不可写，并在`avail`字段中包含`PTE_COW`，以区分写时复制页面和真正的只读页面。  
+3. 对于`UTOP`下地址空间中的每个可写或写时复制页面，父进程调用`duppage`，后者应将写时复制页面映射到子地址空间，然后重新映射到写时复制页面。它自己的地址空间。 [注意：此处的顺序（即在父进程中将页面标记为子进程，然后在父进程中标记）实际上很重要！你知道为什么吗？尝试考虑一种特殊情况，在这种情况下，颠倒顺序可能会引起麻烦。 ] `duppage`设置两个`PTE`，以使该页面不可写，并在`avail`字段中包含`PTE_COW`，以区分写时复制页面和真正的只读页面。  
 
-	但是，异常堆栈不会以这种方式重新映射。相反，你需要在子进程中为异常堆栈分配一个新页面。由于页面错误处理程序将进行实际的复制，并且页面错误处理程序在异常堆栈上运行，因此无法将异常堆栈写时复制：谁可以复制它？  
+    但是，异常堆栈不会以这种方式重新映射。相反，你需要在子进程中为异常堆栈分配一个新页面。由于页面错误处理程序将进行实际的复制，并且页面错误处理程序在异常堆栈上运行，因此无法将异常堆栈写时复制：谁可以复制它？  
 
-	`fork()`还需要处理已经存在的页面，而不是可写或写时复制的页面。
+    `fork()`还需要处理已经存在的页面，而不是可写或写时复制的页面。
 
 4. 父进程为子进程设置用户页面错误入口点，使其看起来像自己一样。
 
@@ -256,58 +256,58 @@ void set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 
 用户级别的`lib/fork.c`代码必须查阅环境的页表以进行上述一些操作（例如，将页面的PTE标记为`PTE_COW`）。为此，内核正是在`UVPT`上映射环境的页表。它使用巧妙的映射技巧使其变得易于查找用户代码的PTE。 `lib/entry.S`设置`uvpt`和`uvpd`，以便你可以轻松地在`lib/fork.c`中查找页表信息。
 
-##### Exercise 12
+#### Exercise 12
 
 在`lib/fork.c`中实现`fork`，`duppage`和`pgfault`。
 
 使用`forktree`程序测试你的代码。它应该产生以下消息，以及散布的'new env'， 'free env'和'exiting gracefully'消息。消息可能不会按此顺序出现，并且环境ID可能不同。
 
-```
-	1000: I am ''
-	1001: I am '0'
-	2000: I am '00'
-	2001: I am '000'
-	1002: I am '1'
-	3000: I am '11'
-	3001: I am '10'
-	4000: I am '100'
-	1003: I am '01'
-	5000: I am '010'
-	4001: I am '011'
-	2002: I am '110'
-	1004: I am '001'
-	1005: I am '111'
-	1006: I am '101'
+```bash
+    1000: I am ''
+    1001: I am '0'
+    2000: I am '00'
+    2001: I am '000'
+    1002: I am '1'
+    3000: I am '11'
+    3001: I am '10'
+    4000: I am '100'
+    1003: I am '01'
+    5000: I am '010'
+    4001: I am '011'
+    2002: I am '110'
+    1004: I am '001'
+    1005: I am '111'
+    1006: I am '101'
 ```
 
 pgfault代码如下：
 
-```
+```c
 static void pgfault(struct UTrapframe *utf)
 {
-	void *addr = (void *) utf->utf_fault_va;
-	uint32_t err = utf->utf_err;
-	int r;
+    void *addr = (void *) utf->utf_fault_va;
+    uint32_t err = utf->utf_err;
+    int r;
 
-	// LAB 4: Your code here.
-	//判断pte是否是可写或写时复制页面，如果不是则中断
-	pte_t pte = uvpt[PGNUM((uintptr_t)addr)];
-	if(!(err & FEC_WR) || !(pte & PTE_COW))
-	{
-		cprintf("[%08x] user fault va %08x ip %08x\n", sys_getenvid(), addr, utf->utf_eip);
-		panic("Page Fault!");
-	}
+    // LAB 4: Your code here.
+    //判断pte是否是可写或写时复制页面，如果不是则中断
+    pte_t pte = uvpt[PGNUM((uintptr_t)addr)];
+    if(!(err & FEC_WR) || !(pte & PTE_COW))
+    {
+        cprintf("[%08x] user fault va %08x ip %08x\n", sys_getenvid(), addr, utf->utf_eip);
+        panic("Page Fault!");
+    }
 
-	// LAB 4: Your code here.
-	//将addr所在的页表映射到新页表，并复制内容
-	uintptr_t start_addr = ROUNDDOWN((uintptr_t)addr, PGSIZE);
-	if((r = sys_page_alloc(0, PFTEMP, PTE_W | PTE_U | PTE_P)) < 0)
-		panic("Page Alloc Failed: %e", r);
-	memmove((void*)PFTEMP, (void*)start_addr, PGSIZE);
-	if((r = sys_page_map(0, (void*)PFTEMP, 0, (void*)start_addr, PTE_W | PTE_U | PTE_P)) < 0)
-		panic("Page Map Failed: %e", r);
-	
-	if ((r = sys_page_unmap(0, PFTEMP)) != 0) {
+    // LAB 4: Your code here.
+    // 将addr所在的页表映射到新页表，并复制内容
+    uintptr_t start_addr = ROUNDDOWN((uintptr_t)addr, PGSIZE);
+    if((r = sys_page_alloc(0, PFTEMP, PTE_W | PTE_U | PTE_P)) < 0)
+        panic("Page Alloc Failed: %e", r);
+    memmove((void*)PFTEMP, (void*)start_addr, PGSIZE);
+    if((r = sys_page_map(0, (void*)PFTEMP, 0, (void*)start_addr, PTE_W | PTE_U | PTE_P)) < 0)
+        panic("Page Map Failed: %e", r);
+
+    if ((r = sys_page_unmap(0, PFTEMP)) != 0) {
         panic("pgfault: %e", r);
     }
 
@@ -318,71 +318,71 @@ static void pgfault(struct UTrapframe *utf)
 
 duppage代码如下：
 
-```
+```c
 static int duppage(envid_t envid, unsigned pn)
 {
-	int r;
+    int r;
 
-	// LAB 4: Your code here.
-	//panic("duppage not implemented");
-	void* va = (void *) (pn * PGSIZE);
-	pte_t pte = uvpt[PGNUM(va)];
+    // LAB 4: Your code here.
+    // panic("duppage not implemented");
+    void* va = (void *) (pn * PGSIZE);
+    pte_t pte = uvpt[PGNUM(va)];
 
-	if((pte & PTE_W) || (pte & PTE_COW))
-	{
-		//因为envid2env根据envid返回环境，而envid是0时，则返回当前环境，所以使用0代表当前环境
-		//将当前环境的va地址所在的页复制到envid环境的地址空间va所在的页
-		if((r = sys_page_map(0, va, envid, va, PTE_U | PTE_COW | PTE_P)) < 0)
-			panic("Page Map Failed: %e", r);
-		// 把当前环境的页表权限改变为写时复制
-		if((r = sys_page_map(0, va, 0, va, PTE_U | PTE_COW | PTE_P)) < 0)
-			panic("Page Map Failed: %e", r);
-	} else { // 当va所在的页的没有写权限时，只需要简单复制
-		if((r = sys_page_map(0, va, envid, va, PTE_U | PTE_P)) < 0)
-			panic("Page Map Failed: %e", r);
-	}
-	return 0;
+    if((pte & PTE_W) || (pte & PTE_COW))
+    {
+        // 因为envid2env根据envid返回环境，而envid是0时，则返回当前环境，所以使用0代表当前环境
+        // 将当前环境的va地址所在的页复制到envid环境的地址空间va所在的页
+        if((r = sys_page_map(0, va, envid, va, PTE_U | PTE_COW | PTE_P)) < 0)
+            panic("Page Map Failed: %e", r);
+        // 把当前环境的页表权限改变为写时复制
+        if((r = sys_page_map(0, va, 0, va, PTE_U | PTE_COW | PTE_P)) < 0)
+            panic("Page Map Failed: %e", r);
+    } else { // 当va所在的页的没有写权限时，只需要简单复制
+        if((r = sys_page_map(0, va, envid, va, PTE_U | PTE_P)) < 0)
+            panic("Page Map Failed: %e", r);
+    }
+    return 0;
 }
 ```
 
 fork代码如下：
 
-```
+```c
 envid_t
 fork(void)
 {
-	// LAB 4: Your code here.
-	//panic("fork not implemented");
-	// Set up our page fault handler appropriately.
-	set_pgfault_handler(pgfault);
-	// Create a child.
-	envid_t envid = sys_exofork();
-	// Copy our address space and page fault handler setup to the child.
-	if (envid == 0) {
-		// child
-		thisenv = &envs[ENVX(sys_getenvid())];
-		return 0;
-	} else {
-		//parent
-		int r;
-		for (uintptr_t va = 0; va < USTACKTOP; va += PGSIZE) {
-			if ((uvpd[PDX(va)] & PTE_P) && (uvpt[PGNUM(va)] & PTE_P)) {
-				//uvpd指向页目录，uvpt指向页表，页目录是一页，页表有1024页
-				duppage(envid, PGNUM(va));
-			}
-		}
-		// 映射异常堆栈
-		if ((r = sys_page_alloc(envid, (void *) (UXSTACKTOP - PGSIZE), PTE_U | PTE_W | PTE_P)) < 0) {
-			return r;
-		}
-		extern void _pgfault_upcall(void);
-		if ((r = sys_env_set_pgfault_upcall(envid, _pgfault_upcall)) < 0) {
-			return r;
-		}
-		sys_env_set_status(envid, ENV_RUNNABLE);
+    // LAB 4: Your code here.
+    // panic("fork not implemented");
+    // Set up our page fault handler appropriately.
+    set_pgfault_handler(pgfault);
+    // Create a child.
+    envid_t envid = sys_exofork();
+    // Copy our address space and page fault handler setup to the child.
+    if (envid == 0) {
+        // child
+        thisenv = &envs[ENVX(sys_getenvid())];
+        return 0;
+    } else {
+        // parent
+        int r;
+        for (uintptr_t va = 0; va < USTACKTOP; va += PGSIZE) {
+            if ((uvpd[PDX(va)] & PTE_P) && (uvpt[PGNUM(va)] & PTE_P)) {
+                // uvpd指向页目录，uvpt指向页表，页目录是一页，页表有1024页
+                duppage(envid, PGNUM(va));
+            }
+        }
+        // 映射异常堆栈
+        if ((r = sys_page_alloc(envid, (void *) (UXSTACKTOP - PGSIZE), PTE_U | PTE_W | PTE_P)) < 0) {
+            return r;
+        }
+        extern void _pgfault_upcall(void);
+        if ((r = sys_env_set_pgfault_upcall(envid, _pgfault_upcall)) < 0) {
+            return r;
+        }
+        sys_env_set_status(envid, ENV_RUNNABLE);
 
-		return envid;
-	}
+        return envid;
+    }
 
 }
 ```
@@ -417,7 +417,7 @@ fork(void)
 
 trapentry.S代码如下：
 
-```
+```c
 TRAPHANDLER_NOEC(IRQ_0, 32)
 TRAPHANDLER_NOEC(IRQ_1, 33)
 TRAPHANDLER_NOEC(IRQ_2, 34)
@@ -438,72 +438,71 @@ TRAPHANDLER_NOEC(IRQ_15, 47)
 
 trap_init.c代码如下：
 
-```
-	//IRQ
-	extern int IRQ_0;
-	extern int IRQ_1;
-	extern int IRQ_2;
-	extern int IRQ_3;
-	extern int IRQ_4;
-	extern int IRQ_5;
-	extern int IRQ_6;
-	extern int IRQ_7;
-	extern int IRQ_8;
-	extern int IRQ_9;
-	extern int IRQ_10;
-	extern int IRQ_11;
-	extern int IRQ_12;
-	extern int IRQ_13;
-	extern int IRQ_14;
-	extern int IRQ_15;
+```c
+    // IRQ
+    extern int IRQ_0;
+    extern int IRQ_1;
+    extern int IRQ_2;
+    extern int IRQ_3;
+    extern int IRQ_4;
+    extern int IRQ_5;
+    extern int IRQ_6;
+    extern int IRQ_7;
+    extern int IRQ_8;
+    extern int IRQ_9;
+    extern int IRQ_10;
+    extern int IRQ_11;
+    extern int IRQ_12;
+    extern int IRQ_13;
+    extern int IRQ_14;
+    extern int IRQ_15;
 
-	SETGATE(idt[IRQ_OFFSET + 0], 0, GD_KT, &IRQ_0, 0);
-	SETGATE(idt[IRQ_OFFSET + 1], 0, GD_KT, &IRQ_1, 0);
-	SETGATE(idt[IRQ_OFFSET + 2], 0, GD_KT, &IRQ_2, 0);
-	SETGATE(idt[IRQ_OFFSET + 3], 0, GD_KT, &IRQ_3, 0);
-	SETGATE(idt[IRQ_OFFSET + 4], 0, GD_KT, &IRQ_4, 0);
-	SETGATE(idt[IRQ_OFFSET + 5], 0, GD_KT, &IRQ_5, 0);
-	SETGATE(idt[IRQ_OFFSET + 6], 0, GD_KT, &IRQ_6, 0);
-	SETGATE(idt[IRQ_OFFSET + 7], 0, GD_KT, &IRQ_7, 0);
-	SETGATE(idt[IRQ_OFFSET + 8], 0, GD_KT, &IRQ_8, 0);
-	SETGATE(idt[IRQ_OFFSET + 9], 0, GD_KT, &IRQ_9, 0);
-	SETGATE(idt[IRQ_OFFSET + 10], 0, GD_KT, &IRQ_10, 0);
-	SETGATE(idt[IRQ_OFFSET + 11], 0, GD_KT, &IRQ_11, 0);
-	SETGATE(idt[IRQ_OFFSET + 12], 0, GD_KT, &IRQ_12, 0);
-	SETGATE(idt[IRQ_OFFSET + 13], 0, GD_KT, &IRQ_13, 0);
-	SETGATE(idt[IRQ_OFFSET + 14], 0, GD_KT, &IRQ_14, 0);
-	SETGATE(idt[IRQ_OFFSET + 15], 0, GD_KT, &IRQ_15, 0);
+    SETGATE(idt[IRQ_OFFSET + 0], 0, GD_KT, &IRQ_0, 0);
+    SETGATE(idt[IRQ_OFFSET + 1], 0, GD_KT, &IRQ_1, 0);
+    SETGATE(idt[IRQ_OFFSET + 2], 0, GD_KT, &IRQ_2, 0);
+    SETGATE(idt[IRQ_OFFSET + 3], 0, GD_KT, &IRQ_3, 0);
+    SETGATE(idt[IRQ_OFFSET + 4], 0, GD_KT, &IRQ_4, 0);
+    SETGATE(idt[IRQ_OFFSET + 5], 0, GD_KT, &IRQ_5, 0);
+    SETGATE(idt[IRQ_OFFSET + 6], 0, GD_KT, &IRQ_6, 0);
+    SETGATE(idt[IRQ_OFFSET + 7], 0, GD_KT, &IRQ_7, 0);
+    SETGATE(idt[IRQ_OFFSET + 8], 0, GD_KT, &IRQ_8, 0);
+    SETGATE(idt[IRQ_OFFSET + 9], 0, GD_KT, &IRQ_9, 0);
+    SETGATE(idt[IRQ_OFFSET + 10], 0, GD_KT, &IRQ_10, 0);
+    SETGATE(idt[IRQ_OFFSET + 11], 0, GD_KT, &IRQ_11, 0);
+    SETGATE(idt[IRQ_OFFSET + 12], 0, GD_KT, &IRQ_12, 0);
+    SETGATE(idt[IRQ_OFFSET + 13], 0, GD_KT, &IRQ_13, 0);
+    SETGATE(idt[IRQ_OFFSET + 14], 0, GD_KT, &IRQ_14, 0);
+    SETGATE(idt[IRQ_OFFSET + 15], 0, GD_KT, &IRQ_15, 0);
 ```
 
 env_alloc代码如下：
 
-```
-	// Enable interrupts while in user mode.
-	// LAB 4: Your code here.
-	e->env_tf.tf_eflags |= FL_IF;
+```c
+    // Enable interrupts while in user mode.
+    // LAB 4: Your code here.
+    e->env_tf.tf_eflags |= FL_IF;
 ```
 
 取消在`kern/shed.c sched_halt()`中`sti`的注释，开启中断
 
 如果出现下面的错误：
 
-```
+```bash
 kernel panic on CPU 0 at kern/trap.c:310: assertion failed: !(read_eflags() & FL_IF)
 ```
 
 是因为在注册中断的开启了trap，设置为0就行
 
-```
+```bash
 SETGATE(idt[T_PGFLT], 0, GD_KT, &th_pgflt, 0);
 ```
 
 注释掉`kern/shed.c shed_halt()`的下列部分
 
+```c
+    // Uncomment the following line after completing exercise 13
+    "sti\n"
 ```
-		// Uncomment the following line after completing exercise 13
-		"sti\n"
-```
-
 
 #### 处理时钟中断
 
@@ -519,7 +518,7 @@ SETGATE(idt[T_PGFLT], 0, GD_KT, &th_pgflt, 0);
 
 代码如下：
 
-```
+```c
     if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
         lapic_eoi();
         sched_yield();
@@ -569,34 +568,34 @@ SETGATE(idt[T_PGFLT], 0, GD_KT, &th_pgflt, 0);
 
 `kern/syscall.c syscall`添加如下代码：
 
-```
+```c
 case SYS_ipc_try_send:
-	return sys_ipc_try_send(a1, a2, (void *)a3, a4);
+    return sys_ipc_try_send(a1, a2, (void *)a3, a4);
 case SYS_ipc_recv:
-	return sys_ipc_recv((void *)a1);
+    return sys_ipc_recv((void *)a1);
 ```
 
 sys_ipc_recv代码如下：
 
-```
-// 阻塞直到值准备就绪。 
+```c
+// 阻塞直到值准备就绪。
 // 使用struct Env的env_ipc_recving和env_ipc_dstva字段记录要接收的内容，将自己标记为不可运行，然后放弃CPU。
 //
 // 如果'dstva'小于UTOP，则可以接收数据页面。 “dstva”是发送页面应映射到的虚拟地址。
 //
 // 该函数仅在出错时返回，但是系统调用最终将在成功时返回0。
 // Return < 0 on error.  Errors are:
-//	-E_INVAL if dstva < UTOP but dstva is not page-aligned.
+//  -E_INVAL if dstva < UTOP but dstva is not page-aligned.
 static int sys_ipc_recv(void *dstva)
 {
-	// LAB 4: Your code here.
+    // LAB 4: Your code here.
     if ((uintptr_t) dstva < UTOP && PGOFF(dstva) != 0) {
-		return -E_INVAL;
-	}
-		
-	curenv->env_ipc_dstva = dstva;
-	curenv->env_ipc_recving = true;
-	curenv->env_status = ENV_NOT_RUNNABLE;
+        return -E_INVAL;
+    }
+
+    curenv->env_ipc_dstva = dstva;
+    curenv->env_ipc_recving = true;
+    curenv->env_status = ENV_NOT_RUNNABLE;
 
     sys_yield();
 
@@ -604,7 +603,7 @@ static int sys_ipc_recv(void *dstva)
 }
 ```
 
-```
+```c
 // 尝试将`value`发送到目标环境“envid”。
 // 如果 srcva < UTOP，则将发送当前映射到“srcva”的页面，以便接收者共享同一页面。
 //
@@ -624,49 +623,49 @@ static int sys_ipc_recv(void *dstva)
 //
 // Returns 0 on success, < 0 on error.
 // Errors are:
-//	-E_BAD_ENV if environment envid doesn't currently exist.
-//		(No need to check permissions.)
-//	-E_IPC_NOT_RECV if envid is not currently blocked in sys_ipc_recv,
-//		or another environment managed to send first.
-//	-E_INVAL if srcva < UTOP but srcva is not page-aligned.
-//	-E_INVAL if srcva < UTOP and perm is inappropriate
-//		(see sys_page_alloc).
-//	-E_INVAL if srcva < UTOP but srcva is not mapped in the caller's
-//		address space.
-//	-E_INVAL if (perm & PTE_W), but srcva is read-only in the
-//		current environment's address space.
-//	-E_NO_MEM if there's not enough memory to map srcva in envid's
-//		address space.
+//  -E_BAD_ENV if environment envid doesn't currently exist.
+//      (No need to check permissions.)
+//  -E_IPC_NOT_RECV if envid is not currently blocked in sys_ipc_recv,
+//      or another environment managed to send first.
+//  -E_INVAL if srcva < UTOP but srcva is not page-aligned.
+//  -E_INVAL if srcva < UTOP and perm is inappropriate
+//      (see sys_page_alloc).
+//  -E_INVAL if srcva < UTOP but srcva is not mapped in the caller's
+//      address space.
+//  -E_INVAL if (perm & PTE_W), but srcva is read-only in the
+//      current environment's address space.
+//  -E_NO_MEM if there's not enough memory to map srcva in envid's
+//      address space.
 static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
-	// LAB 4: Your code here.
-    envid_t src_envid = sys_getenvid(); 
+    // LAB 4: Your code here.
+    envid_t src_envid = sys_getenvid();
     struct Env *dst_e;
-	//	-E_BAD_ENV if environment envid doesn't currently exist.
-	//		(No need to check permissions.)
+    // -E_BAD_ENV if environment envid doesn't currently exist.
+    //     (No need to check permissions.)
     if (envid2env(envid, &dst_e, 0) < 0) {
         return -E_BAD_ENV;
     }
 
-	//	-E_IPC_NOT_RECV if envid is not currently blocked in sys_ipc_recv,
-	//		or another environment managed to send first.
+    // -E_IPC_NOT_RECV if envid is not currently blocked in sys_ipc_recv,
+    //     or another environment managed to send first.
     if (!(dst_e->env_ipc_recving)) {
-		return -E_IPC_NOT_RECV;
-	}
+        return -E_IPC_NOT_RECV;
+    }
 
-	dst_e->env_ipc_from = src_envid;
+    dst_e->env_ipc_from = src_envid;
     dst_e->env_ipc_value = value;
     dst_e->env_ipc_perm = 0;
 
     if ((uintptr_t)srcva < UTOP && ((uintptr_t)dst_e->env_ipc_dstva) < UTOP) {
-		//sys_page_map可以检查地址是否对齐，也能检查权限
+        // sys_page_map可以检查地址是否对齐，也能检查权限
         int r = sys_page_map(src_envid, srcva, envid, (void *)dst_e->env_ipc_dstva, perm);
-        if (r < 0) 
-			return r;
+        if (r < 0)
+            return r;
         dst_e->env_ipc_perm = perm;
     }
-    
+
     dst_e->env_status = ENV_RUNNABLE;
     // 系统调用的返回值，设置在%eax
     dst_e->env_tf.tf_regs.reg_eax = 0;
@@ -677,7 +676,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 
 ipc_recv代码如下：
 
-```
+```c
 // 通过IPC接收值并将其返回。
 // 如果“pg”为非空，则发件人发送的任何页面都将映射到该地址。
 // 如果“from_env_store”为非空，则将IPC发送方的envid存储在*from_env_store中。
@@ -688,12 +687,12 @@ ipc_recv代码如下：
 //
 // Hint:
 //   使用“thisenv”发现值和发送者。
-//   如果'pg'为null，则向sys_ipc_recv传递一个被理解为“no page”的值。 
+//   如果'pg'为null，则向sys_ipc_recv传递一个被理解为“no page”的值。
 //  （0不是正确的值，因为这是映射页面的完全有效的位置。）
 int32_t
 ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
 {
-	// LAB 4: Your code here.
+    // LAB 4: Your code here.
     int r;
     if (pg != NULL) {
         r = sys_ipc_recv(pg);
@@ -702,16 +701,16 @@ ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
     }
     if (r < 0) {
         // failed
-        if (from_env_store != NULL) 
-			*from_env_store = 0;
-        if (perm_store != NULL) 
-			*perm_store = 0;
+        if (from_env_store != NULL)
+            *from_env_store = 0;
+        if (perm_store != NULL)
+            *perm_store = 0;
         return r;
     } else {
-        if (from_env_store != NULL) 
-			*from_env_store = thisenv->env_ipc_from;
-        if (perm_store != NULL) 
-			*perm_store = thisenv->env_ipc_perm;
+        if (from_env_store != NULL)
+            *from_env_store = thisenv->env_ipc_from;
+        if (perm_store != NULL)
+            *perm_store = thisenv->env_ipc_perm;
         return thisenv->env_ipc_value;
     }
 }
@@ -719,7 +718,7 @@ ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
 
 ipc_send代码如下：
 
-```
+```c
 //将“val”（如果“pg”为非空，则将“pg”与“perm”一起发送）到“toenv”。
 //此函数一直尝试直到成功。
 //除-E_IPC_NOT_RECV以外的任何错误均应调用panic()。
@@ -731,19 +730,19 @@ ipc_send代码如下：
 void
 ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
 {
-	// LAB 4: Your code here.
-	int32_t retval = -1;
-	while (retval != 0)
-	{
-		if(pg != NULL)
-			retval = sys_ipc_try_send(to_env, val, pg, perm);
-		else 
-			retval = sys_ipc_try_send(to_env, val, (void*)UTOP, perm);
-			
-		if(retval == 0)
-			sys_yield();
-		else if(retval != -E_IPC_NOT_RECV)
-			panic("Receving wrong return value of sys_ipc_try_send");
-	}
+    // LAB 4: Your code here.
+    int32_t retval = -1;
+    while (retval != 0)
+    {
+        if(pg != NULL)
+            retval = sys_ipc_try_send(to_env, val, pg, perm);
+        else
+            retval = sys_ipc_try_send(to_env, val, (void*)UTOP, perm);
+
+        if(retval == 0)
+            sys_yield();
+        else if(retval != -E_IPC_NOT_RECV)
+            panic("Receving wrong return value of sys_ipc_try_send");
+    }
 }
 ```

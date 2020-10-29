@@ -11,7 +11,7 @@ tag: Mysql
 
 ### linux环境安装mysql
 
-```
+```bash
 sudo apt update
 sudo apt install mysql-server
 ```
@@ -24,24 +24,23 @@ MySql: `mysql  Ver 14.14 Distrib 5.7.26, for Linux (x86_64) using  EditLine wrap
 
 linux: `Ubuntu 18.04.2 LTS`
 
-
 #### 第一步
 
 `grant all privileges on *.* to 'root'@'%' identified by 'password';`
 
 `flush privileges;`
 
-+ 第一个\* 是数据库名称，可以改成允许访问的数据库名称
+* 第一个\* 是数据库名称，可以改成允许访问的数据库名称
 
-+ 第二个\* 是数据库的表名称(\*代表允许访问任意的表和数据库)
+* 第二个\* 是数据库的表名称(\*代表允许访问任意的表和数据库)
 
-+ root代表远程登录使用的用户名，可以自定义
+* root代表远程登录使用的用户名，可以自定义
 
-+ % 代表允许任意ip登录，如果你想指定特定的IP，替换掉就可以
+* % 代表允许任意ip登录，如果你想指定特定的IP，替换掉就可以
 
-+ password 是运程连接密码
+* password 是运程连接密码
 
-+ 第二条命令能让上面的命令立即生效
+* 第二条命令能让上面的命令立即生效
 
 #### 第二步
 
@@ -57,11 +56,9 @@ linux: `Ubuntu 18.04.2 LTS`
 
 `bind-address = 127.0.0.1`可能不在这个文件中,可以通过查找`find /* -name my.cnf`,这个文件里可能就有,如果没有,可以查看这个文件包含的路径,如:
 
-```
+```bash
 !includedir /etc/mysql/conf.d/
 !includedir /etc/mysql/mysql.conf.d/
 ```
 
 这两个路径下面的文件不多,可以一个一个找.
-
-

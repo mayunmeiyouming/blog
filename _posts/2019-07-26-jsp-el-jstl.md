@@ -23,7 +23,7 @@ taglib: `<%@ taglib prefix="c" uri=http://java.sun.com/jsp/jstl/core %>`
 
 ### JSP注释
 
-```
+```html
 <%--
 
 --%>
@@ -34,10 +34,10 @@ taglib: `<%@ taglib prefix="c" uri=http://java.sun.com/jsp/jstl/core %>`
 JSP内置对象和servlet对像的关系:
 
 
-```
+```text
  jsp内置对象                servlet
 
-pageContext             PageContext          
+pageContext             PageContext
 request                 HttpServletRequest/ServletRequest
 session                 HttpSession
 application             ServletContext
@@ -76,12 +76,13 @@ Servlet创建时间
 
 ### 域对象
 
-```
+```text
 pageScope              pageContext
 requestScope           request
 sessionScope           session
 applicationScope       application(ServletContext)
 ```
+
 如果采用`${name}`语法,其中忽略键名,EL会从最小的域开始寻找值.分别是pageScope,requestScope,sessionScope,applicationScope
 
 ### 获取对象的属性(调用对象中的getter方法)
@@ -110,7 +111,7 @@ pageContext
 
 必需的属性test,接收boolean表达式,值为true才会显示,没有else语句
 
-```
+```java
 <c:if test="true">
 我是真
 </c:if>
@@ -118,11 +119,11 @@ pageContext
 
 ### choose
 
-```
+```java
 <c:choose>
-	<c:when test=""></c:when>
-	<c:when test=""></c:when>
-	<c:otherwise></c:otherwise>
+    <c:when test=""></c:when>
+    <c:when test=""></c:when>
+    <c:otherwise></c:otherwise>
 </c:choose>
 ```
 
@@ -130,7 +131,7 @@ pageContext
 
 普通for循环:
 
-```
+```java
 <c:forEach begin="1" end="10" var="i" step="1">
 ${i}<br>
 </c:forEach>
@@ -148,7 +149,7 @@ items: 容器对象
 
 var: 容器元素的临时变量
 
-```
+```java
 <c:forEach items="${list}" var="str" varStatus="s">
 ${s.index} ${s.count} ${str}
 </c:forEach>
