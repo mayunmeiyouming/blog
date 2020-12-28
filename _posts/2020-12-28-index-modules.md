@@ -73,15 +73,15 @@ tag: Index Modules
 
 `index.soft_deletes.retention_lease.period`
 
-在视为过期之前保留分片历史保留租约的最大期限。分片历史保留租约可确保在合并 Lucene 索引期间保留软删除。如果将软删除合并到一起，然后再将其复制到关注者，则由于领导者的历史记录不完整，因此以下过程将失败。默认为12h。
+在视为过期之前保留分片历史保留租约的最大期限。分片历史保留租约可确保在合并 Lucene 索引期间保留软删除。如果将软删除合并到一起，然后再将其复制到关注者，则由于领导者的历史记录不完整，因此以下过程将失败。默认为 12h。
 
 `index.load_fixed_bitset_filters_eagerly`
 
-指示是否为嵌套查询预加载缓存的过滤器。 可能的值为 true（默认）和 false。
+指示是否为嵌套查询预加载缓存的过滤器。可能的值为 true（默认）和 false。
 
 `index.hidden`
 
-指示默认情况下是否应隐藏索引。使用通配符表达式时，默认情况下不返回隐藏索引。通过使用expand_wildcards参数，可以按请求控制此行为。可能的值为 `true` 和 `false`（默认值）。
+指示默认情况下是否应隐藏索引。使用通配符表达式时，默认情况下不返回隐藏索引。通过使用 `expand_wildcards` 参数，来控制每个请求的行为。值为 `true` 和 `false`（默认值）。
 
 ## Dynamic index settings
 
