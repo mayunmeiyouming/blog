@@ -13,31 +13,31 @@ tag: Index Modules
 
 索引模块是为每个索引创建的模块，用于控制与索引相关的所有方面。
 
-索引设置
+## Index Settings
 
-可以为每个索引设置索引级别设置。 设置可能是：
+可以为每个索引设置索引级别
 
-静态的
+**static**
 
-它们只能在索引创建时或在封闭索引上设置。
+只能在索引创建时或在关闭的索引上设置。
 
-动态
+**dynamic**
 
-可以使用update-index-settings API在实时索引上对其进行更改。
+可以使用 update-index-settings API 来实时更新索引。 
 
-更改封闭索引上的静态或动态索引设置可能会导致不正确的设置，如果不删除并重新创建索引，则无法纠正这些设置。
+`更改关闭的索引上的静态或动态索引设置可能会导致不正确的设置，如果不删除并重新创建索引，则无法纠正这些错误的设置。`
 
-静态索引设置
+## Static index settings
 
-以下是与任何特定索引模块都不相关的所有静态索引设置的列表：
+以下是与任何特定索引模块都不相关的静态索引设置的列表：
 
-index.number_of_shards
+`index.number_of_shards`
 
-索引应具有的主要分片数。 默认值为1。只能在创建索引时设置此设置。 不能在封闭索引上更改它。
+索引应具有的主要分片数。默认值为 1。只能在创建索引时设置，不能在关闭的索引上更改它。
 
 分片的数量限制为每个索引1024个。 此限制是一个安全限制，可防止意外创建索引，该索引由于资源分配而可能破坏群集的稳定性。 可以通过在群集的每个节点上指定export ES_JAVA_OPTS =“-Des.index.max_number_of_shards = 128”系统属性来修改此限制。
 
-index.number_of_routing_shards
+`index.number_of_routing_shards`
 
 用于拆分索引的路由碎片的数量。
 
@@ -53,41 +53,35 @@ index.number_of_routing_shards
 
 此设置的默认值取决于索引中的主分片数。 默认值旨在允许您以2的因子进行拆分，最多可以分割1024个碎片。
 
-index.shard.check_on_startup
+`index.shard.check_on_startup`
 
 打开前是否应检查碎片是否损坏。 当检测到损坏时，它将防止分片被打开。 接受：
 
-假
+`false` （默认）打开分片时不检查是否损坏。
 
-（默认）打开分片时不检查是否损坏。
+`checksum` 检查物理损坏。
 
-校验和
+`true` 检查物理和逻辑损坏。就 CPU 和内存使用而言，这是非常昂贵的。
 
-检查物理损坏。
+在大型索引上检查分片可能会花费很多时间。
 
-真正
-
-检查物理和逻辑损坏。 就CPU和内存使用而言，这要昂贵得多。
-
-仅专家。 在大型索引上检查分片可能会花费很多时间。
-
-索引编解码器
+`index.codec`
 
 默认值使用LZ4压缩来压缩存储的数据，但是可以将其设置为best_compression，它使用DEFLATE来获得更高的压缩率，但是会降低存储字段的性能。 如果您要更新压缩类型，则合并段后将应用新的压缩类型。 可以使用强制合并来强制段合并。
 
-index.routing_partition_size
+`index.routing_partition_size`
 
 自定义路由值可以到达的分片数量。 默认为1，并且只能在创建索引时设置。 除非index.number_of_shards值也为1，否则该值必须小于index.number_of_shards。有关如何使用此设置的更多详细信息，请参见路由到索引分区。
 
-index.soft_deletes.enabled
+`index.soft_deletes.enabled`
 
 [7.6.0]在7.6.0中弃用。 不建议创建禁用了软删除的索引，并且在将来的Elasticsearch版本中将删除创建索引。指示是否在索引上启用了软删除。 软删除只能在创建索引时配置，并且只能在Elasticsearch 6.5.0或之后创建的索引上配置。 默认为true。
 
-index.soft_deletes.retention_lease.period
+`index.soft_deletes.retention_lease.period`
 
 在视为过期之前保留分片历史保留租约的最大期限。 分片历史保留租约可确保在合并Lucene索引期间保留软删除。 如果将软删除合并到一起，然后再将其复制到关注者，则由于领导者的历史记录不完整，因此以下过程将失败。 默认为12h。
 
-index.load_fixed_bitset_filters_eagerly
+`index.load_fixed_bitset_filters_eagerly`
 
 指示是否为嵌套查询预加载缓存的过滤器。 可能的值为true（默认）和false。
 
@@ -99,67 +93,67 @@ index.load_fixed_bitset_filters_eagerly
 
 以下是与任何特定索引模块都不相关的所有动态索引设置的列表：
 
-index.number_of_replicas
+`index.number_of_replicas`
 
 每个主分片具有的副本数。 默认为1。
 
-index.auto_expand_replicas
+`index.auto_expand_replicas`
 
 根据集群中数据节点的数量自动扩展副本的数量。 设置为以短划线分隔的上下限（例如0-5）或将all用作上限（例如0-all）。 默认为false（即已禁用）。 请注意，副本的自动扩展数量仅考虑了分配过滤规则，而忽略了其他分配规则，例如分片分配意识和每个节点的总分片，如果适用的规则阻止了所有复制，这可能导致群集运行状况为黄色 复制副本被分配。
 
-index.search.idle.after
+`index.search.idle.after`
 
 分片在被视为搜索空闲之前无法接收搜索或获取请求的时间。 （默认为30秒）
 
-index.refresh_interval
+`index.refresh_interval`
 
 执行刷新操作的频率，这使对索引的最近更改可见以进行搜索。 默认为1s。 可以设置为-1以禁用刷新。 如果未明确设置此设置，则至少在index.search.idle.after秒之后仍未看到搜索流量的分片在收到搜索请求之前将不会接收后台刷新。 命中空闲刷新的空闲分区的搜索将等待下一次后台刷新（在1秒内）。 此行为旨在在不执行搜索的情况下自动优化默认情况下的批量索引。 为了退出此行为，应将显式值1s设置为刷新间隔。
 
-index.max_result_window
+`index.max_result_window`
 
 搜索到此索引的最大值为+大小。 默认值为10000。搜索请求占用的堆内存和时间与+大小成正比，这将限制该内存。 有关提高此效果的更有效的选择，请参见滚动或之后搜索。
 
-index.max_inner_result_window
+`index.max_inner_result_window`
 
 内部匹配定义和顶部匹配聚合的最大+值到该索引。 默认值为100。内部匹配和顶部匹配聚合占用的堆内存和时间与+大小成正比，因此会限制该内存。
 
-index.max_rescore_window
+`index.max_rescore_window`
 
 搜索此索引时重新评分请求的window_size的最大值。 默认为index.max_result_window，默认为10000。搜索请求占用的堆内存和时间与max（window_size，from + size）成正比，因此会限制该内存。
 
-index.max_docvalue_fields_search
+`index.max_docvalue_fields_search`
 
 查询中允许的最大docvalue_fields数。 默认值为100。Doc-Value字段很昂贵，因为它们可能会导致每个字段按文档搜索。
 
-index.max_script_fields
+`index.max_script_fields`
 
 查询中允许的最大script_fields数。 默认为32
 
-index.max_ngram_diff
+`index.max_ngram_diff`
 
 NGramTokenizer和NGramTokenFilter的min_gram和max_gram之间的最大允许差异。 默认为1。
 
-index.max_shingle_diff
+`index.max_shingle_diff`
 
 带状令牌过滤器的max_shingle_size和min_shingle_size之间允许的最大差异。 默认为3。
 
-index.max_refresh_listeners
+`index.max_refresh_listeners`
 
 索引的每个分片上可用的最大刷新侦听器数。 这些侦听器用于实现refresh = wait_for。
 
-index.analyze.max_token_count
+`index.analyze.max_token_count`
 
 使用_analyze API可以产生的最大令牌数。 默认为10000
 
-index.highlight.max_analyzed_offset
+`index.highlight.max_analyzed_offset`
 
 突出显示请求将分析的最大字符数。 仅当在没有偏移量或术语向量的索引文本上要求突出显示时，此设置才适用。 默认为1000000
 
-index.max_terms_count
+`index.max_terms_count`
 
 术语查询中可以使用的最大术语数。 默认为65536
 
-index.max_regex_length
+`index.max_regex_length`
 
 可在Regexp查询中使用的正则表达式的最大长度。 默认为1000
 
@@ -187,15 +181,15 @@ primaries-仅允许对主要碎片进行碎片重新平衡。
 
 none-不允许分片重新平衡。
 
-index.gc_deletes
+`index.gc_deletes`
 
 删除的文档的版本号可用于进一步版本控制的时间长度。 默认值为60秒。
 
-index.default_pipeline
+`index.default_pipeline`
 
 此索引的默认摄取节点管道。 如果设置了默认管道并且该管道不存在，则索引请求将失败。 使用管道参数可以覆盖默认值。 特殊管道名称_none表示不应运行任何摄取管道。
 
-index.final_pipeline
+`index.final_pipeline`
 
 此索引的最终摄取节点管道。 如果设置了最终管道并且该管道不存在，则索引请求将失败。 最终管道始终在请求管道（如果指定）和默认管道（如果存在）之后运行。 特殊管道名称_none表示将不会运行任何摄取管道。
 
