@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+
+  {% include head.html %}
+  
+  <body>
+	
+	<div class="main-wrapper">
+		{% include header.html %}
+		{% include banner.html %}
+		{{content}}
+		{% if !page.comment %}
+			{% include comments.html %}
+		{% endif %}
+		{% include footer.html %}
+	</div>
+	
+  </body>
+  {% include analytics.html %}
+</html>

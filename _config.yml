@@ -1,0 +1,73 @@
+#Site
+title: 水榭清松-Song Kong
+description: This is Song' home.
+logo: favicon.png
+url: ikongsong.com
+rss_url: /feed.xml
+
+# Jekyll
+permalink:          /blog/:title/
+markdown:           kramdown
+highlighter:        rouge
+kramdown:
+  auto_ids:         true
+  footnote_nr:      1
+  entity_output:    as_char
+  toc_levels:       1..6
+  enable_coderay:   false
+sass:
+  sass_dir:         assets/_sass
+  style:            compressed
+
+# Comment
+comment:
+  disqus: kongsong    
+  # duoshuo: kongsong
+  # youyan: 2122392
+  # laibili: MTAyMC8yODgzNC81NDA0
+  gitalk: true
+
+# Website analytics
+google_analytics: UA-82494501-1
+baidu_analytics: 5b31ffbbdc6cff18727f3adf75a03777    #from //hm.baidu.com/hm.js?***
+
+# Author information:
+author:
+  #resume: /resume
+  name: Song Kong     #the name of Blog section
+  about_me: I'm Song Kong. This is my online home & blog, where I share thoughts about front-end development, cloud computing, my daily life and other insteresting topics. Feel free to contact me by email if you have any question.
+ 
+# Social Links
+email:               hi@ikongsong.com
+#google.plus:        username
+#twitter:            username
+facebook:            kongsong
+github:              songkong
+stackoverflow:      6438519/song-kong   #from a "http://stackoverflow.com/users/123456/username" link
+linkedin:           kongsong
+#xing:              username
+#instagram:          username
+#lastfm:            username
+#tumblr:            username
+#pinterest:         username
+#foursquare:        username
+#steam:              username
+#dribbble:          username
+#youtube:           username
+#soundcloud:        username
+#weibo:             username
+#flickr:            username
+#codepen:           username
+#keybase:           username
+#xmpp:              username@server.com
+#hackernews:        username
+#behance:           username
+
+# Plugins
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-gist
+
+# Exclude list
+exclude: [README.md, Gemfile, Gemfile.lock, _site, src, vendor, CNAME, LICENSE, Rakefile,.sass-cache,.DS_Store,.idea]
