@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "linux环境下安装Mysql,以及mysql运程连接"
+title:  "linux 环境下安装 Mysql, 以及 mysql 运程连接"
 date:   2019-07-16 16:01:01 +0800
 categories: 数据库
 tag: Mysql
@@ -16,9 +16,9 @@ sudo apt update
 sudo apt install mysql-server
 ```
 
-### MySql运程连接
+### MySql 运程连接
 
-#### 环境和mysql版本
+#### 环境和 mysql 版本
 
 MySql: `mysql  Ver 14.14 Distrib 5.7.26, for Linux (x86_64) using  EditLine wrapper`
 
