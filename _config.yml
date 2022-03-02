@@ -1,6 +1,6 @@
 #Site
-title: 水榭清松-Song Kong
-description: This is Song' home.
+title: 水榭清松
+description: 
 logo: favicon.ico
 url: mayunmeiyouming.gitee.io
 rss_url: /feed.xml
@@ -21,7 +21,7 @@ sass:
 
 # Comment
 comment:
-  disqus: kongsong    
+  disqus: hw    
   # duoshuo: kongsong
   # youyan: 2122392
   # laibili: MTAyMC8yODgzNC81NDA0
@@ -34,17 +34,17 @@ comment:
 # Author information:
 author:
   #resume: /resume
-  name: Song Kong     #the name of Blog section
-  about_me: I'm Song Kong. This is my online home & blog, where I share thoughts about front-end development, cloud computing, my daily life and other insteresting topics. Feel free to contact me by email if you have any question.
+  name: Huang Wei     #the name of Blog section
+  about_me: I'm Huang Wei. This is my online home & blog, where I share thoughts about front-end development, cloud computing, my daily life and other insteresting topics. Feel free to contact me by email if you have any question.
  
 # Social Links
-email:               hi@ikongsong.com
+email:               111
 #google.plus:        username
 #twitter:            username
-facebook:            kongsong
-github:              songkong
-stackoverflow:      6438519/song-kong   #from a "http://stackoverflow.com/users/123456/username" link
-linkedin:           kongsong
+facebook:            111
+github:              github.com/mayunmeiyouming
+stackoverflow:      111   #from a "http://stackoverflow.com/users/123456/username" link
+linkedin:           111
 #xing:              username
 #instagram:          username
 #lastfm:            username
