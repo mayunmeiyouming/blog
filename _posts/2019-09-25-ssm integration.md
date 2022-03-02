@@ -2,12 +2,10 @@
 layout: post
 title:  "ssm整合"
 date:   2019-09-25 11:00:00 +0800
-categories: ssm
-tag: ssm
+categories: [Tech]
+tag: 
+  - ssm
 ---
-
-* content
-{:toc}
 
 applicationContext.xml
 

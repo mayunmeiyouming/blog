@@ -2,12 +2,11 @@
 layout: post
 title:  "SpringMVC"
 date:   2019-09-20 11:00:00 +0800
-categories: Java
-tag: Springmvc
+categories: [Tech]
+tag: 
+  - Springmvc
+  - Java
 ---
-
-* content
-{:toc}
 
 ### 入门
 

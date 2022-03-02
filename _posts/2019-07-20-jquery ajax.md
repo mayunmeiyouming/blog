@@ -2,12 +2,11 @@
 layout: post
 title:  "jquery异步提交数据"
 date:   2019-07-20 16:01:01 +0800
-categories: Web
-tag: Jquery
+categories: [Tech]
+tag: 
+  - Jquery
+  - Web
 ---
-
-* content
-{:toc}
 
 ### JQuery提交普通表单,使用serialize()
 

@@ -2,12 +2,10 @@
 layout: post
 title:  "linux 环境下安装 Mysql, 以及 mysql 运程连接"
 date:   2019-07-16 16:01:01 +0800
-categories: 数据库
-tag: Mysql
+categories: [Tech]
+tag: 
+  - Mysql
 ---
-
-* content
-{:toc}
 
 ### linux 环境安装 mysql
 

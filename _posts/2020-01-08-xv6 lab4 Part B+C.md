@@ -2,12 +2,11 @@
 layout: post
 title:  "6.828 Lab 4: Preemptive Multitasking : Part B + C"
 date:   2020-01-08 21:31:01 +0800
-categories: OS
-tag: xv6
+categories: [Tech]
+tag: 
+  - xv6
+  - OS
 ---
-
-* content
-{:toc}
 
 >本文为原创
 

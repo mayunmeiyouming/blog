@@ -2,12 +2,11 @@
 layout: post
 title:  "JSP,Servlet,EL,JSTl"
 date:   2019-07-26 16:01:01 +0800
-categories: Web
-tag: Jsp
+categories: [Tech]
+tag: 
+  - Jsp
+  - Web
 ---
-
-* content
-{:toc}
 
 ## JSP
 
