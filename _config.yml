@@ -1,7 +1,7 @@
 #Site
 title: 水榭清松-Song Kong
 description: This is Song' home.
-logo: favicon.png
+logo: favicon.ico
 url: mayunmeiyouming.gitee.io
 rss_url: /feed.xml
 
@@ -28,8 +28,8 @@ comment:
   gitalk: true
 
 # Website analytics
-google_analytics: UA-82494501-1
-baidu_analytics: 5b31ffbbdc6cff18727f3adf75a03777    #from //hm.baidu.com/hm.js?***
+# google_analytics: UA-82494501-1
+# baidu_analytics: 5b31ffbbdc6cff18727f3adf75a03777    #from //hm.baidu.com/hm.js?***
 
 # Author information:
 author:
