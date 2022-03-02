@@ -9,7 +9,7 @@ tag: Mysql
 * content
 {:toc}
 
-### linux环境安装mysql
+### linux 环境安装 mysql
 
 ```bash
 sudo apt update
