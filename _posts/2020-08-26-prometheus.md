@@ -2,12 +2,10 @@
 layout: post
 title:  "Prometheus 和 Golang"
 date:   2020-08-26 18:49:01 +0800
-categories: Prometheus
-tag: Prometheus
+categories: [Tech]
+tag: 
+  - Prometheus
 ---
-
-* content
-{:toc}
 
 ## 一、安装 Prometheus
 
