@@ -2,8 +2,10 @@
 layout: post
 title:  "XV6: File System"
 date:   2020-02-02 14:10:01 +0800
-categories: OS
-tag: xv6
+categories: [Tech]
+tag: 
+  - xv6
+  - OS
 ---
 
 > xv6文件系统
