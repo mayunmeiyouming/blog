@@ -15,7 +15,7 @@ tag: xv6
 
 首先我们来看看文件系统的流程：
 
-![]({{ '/styles/images/2020-02-02-xv6 file system/01.png' | prepend: site.baseurl}})
+![]({{ '/assets/images/posts/2020-02-02-xv6 file system/01.png' | prepend: site.baseurl}})
 
 ## serve_init函数
 
@@ -40,7 +40,7 @@ tag: xv6
 
 这是一个打开文件的请求，将调用serve_open函数。下面是函数的流程图：
 
-![]({{ '/styles/images/2020-02-02-xv6 file system/02.png' | prepend: site.baseurl}})
+![]({{ '/assets/images/posts/2020-02-02-xv6 file system/02.png' | prepend: site.baseurl}})
 
 首先调用函数`open_alloc`分配一个`struct OpenFile`存放在变量`o`中。如果需要创建文件，则调用函数`file_create`，该函数将分配一个`struct File`。
 

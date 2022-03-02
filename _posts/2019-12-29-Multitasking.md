@@ -56,7 +56,7 @@ TSS的字段分为两类：
 2. 通过确保在任务切换时两个页面都存在或不存在。如果两个页面都不存在，那么缺页异常处理程序必须在重新启动导致任务切换的指令之前使两个页面都存在。
 
 <span id="01">
-![]({{ '/styles/images/2019-12-29-Multitasking/01.gif' | prepend: site.baseurl }})
+![]({{ '/assets/images/posts/2019-12-29-Multitasking/01.gif' | prepend: site.baseurl }})
 
 ## TSS描述符（TSS Descriptor）
 
@@ -71,7 +71,7 @@ TSS的字段分为两类：
 TSS描述符只能存放在GDT中。尝试使用TI = 1（指当前LDT）的selector去识别TSS会导致异常。
 
 <span id="02">
-![]({{ '/styles/images/2019-12-29-Multitasking/02.gif' | prepend: site.baseurl }})
+![]({{ '/assets/images/posts/2019-12-29-Multitasking/02.gif' | prepend: site.baseurl }})
 
 ## Task Register
 
@@ -86,7 +86,7 @@ LTR（Load task register）使用selector作为操作数存储到任务寄存器
 STR（Store task register）读取任务寄存器的可见部分，并存储在通用寄存器或内存中。 STR不需要特权。
 
 <span id="03">
-![]({{ '/styles/images/2019-12-29-Multitasking/03.gif' | prepend: site.baseurl }})
+![]({{ '/assets/images/posts/2019-12-29-Multitasking/03.gif' | prepend: site.baseurl }})
 
 ## Task Gate Descriptor
 
@@ -107,10 +107,10 @@ Task Gate的DPL字段控制使用描述符进行任务切换的权限。除非se
 [图7-5](#05)说明了LDT中的task gate和IDT中的task gate是如何识别同一任务。
 
 <span id="04">
-![]({{ '/styles/images/2019-12-29-Multitasking/04.gif' | prepend: site.baseurl }})
+![]({{ '/assets/images/posts/2019-12-29-Multitasking/04.gif' | prepend: site.baseurl }})
 
 <span id="05">
-![]({{ '/styles/images/2019-12-29-Multitasking/05.gif' | prepend: site.baseurl }})
+![]({{ '/assets/images/posts/2019-12-29-Multitasking/05.gif' | prepend: site.baseurl }})
 
 ## 任务切换（Task Switching）
 
@@ -282,4 +282,4 @@ TSS的LDT selector和PDBR字段使软件系统设计人员可以灵活地利用8
 3. LDT中的描述符别名。不同LDT的某些描述符可能指向相同的线性地址空间。如果通过涉及的任务的页面映射将该线性地址空间映射到相同的物理空间，则这些描述符允许任务共享公共空间。这样的描述符通常称为`aliases`。这种共享方法比前两种方法更具选择性。 LDT中的其他描述符可能指向不同的线性地址或未共享的线性地址。
 
 <span id="06">
-![]({{ '/styles/images/2019-12-29-Multitasking/06.gif' | prepend: site.baseurl }})
+![]({{ '/assets/images/posts/2019-12-29-Multitasking/06.gif' | prepend: site.baseurl }})
