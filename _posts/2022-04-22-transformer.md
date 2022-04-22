@@ -22,6 +22,8 @@ tag:
 
 ![]({{ '/assets/images/posts/2022-04-22-transformer/04.png' | prepend: site.baseurl}})
 
+点积在数学中，又称数量积（dot product; scalar product; inner product） [链接](https://baike.baidu.com/item/%E7%82%B9%E7%A7%AF/9648528)
+
 ![]({{ '/assets/images/posts/2022-04-22-transformer/05.png' | prepend: site.baseurl}})
 
 ![]({{ '/assets/images/posts/2022-04-22-transformer/06.png' | prepend: site.baseurl}})
@@ -81,3 +83,17 @@ tag:
 ## train
 
 ![]({{ '/assets/images/posts/2022-04-22-transformer/27.png' | prepend: site.baseurl}})
+
+[交叉熵 (cross entropy)](https://zhuanlan.zhihu.com/p/54066141) 
+
+## 疑问
+
+Word Embedding
+
+fully connected
+
+feed forward network
+
+residual connection
+
+layer normalization
