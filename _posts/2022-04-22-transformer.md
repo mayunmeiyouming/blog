@@ -51,3 +51,33 @@ tag:
 为 self attention 添加位置信息。每个位置都有一个唯一的位置向量 𝑒。
 
 ![]({{ '/assets/images/posts/2022-04-22-transformer/16.png' | prepend: site.baseurl}})
+
+## seq2seq
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/17.png' | prepend: site.baseurl}})
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/18.png' | prepend: site.baseurl}})
+
+### encoder
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/19.png' | prepend: site.baseurl}})
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/20.png' | prepend: site.baseurl}})
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/21.png' | prepend: site.baseurl}})
+
+### decoder
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/22.png' | prepend: site.baseurl}})
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/23.png' | prepend: site.baseurl}})
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/24.png' | prepend: site.baseurl}})
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/25.png' | prepend: site.baseurl}})
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/26.png' | prepend: site.baseurl}})
+
+## train
+
+![]({{ '/assets/images/posts/2022-04-22-transformer/27.png' | prepend: site.baseurl}})
