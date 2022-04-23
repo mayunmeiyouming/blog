@@ -1,0 +1,607 @@
+I"�M<blockquote>
+  <p>本文为原创</p>
+</blockquote>
+
+<h2 id="磁盘上的文件系统结构">磁盘上的文件系统结构</h2>
+
+<p>大多数UNIX文件系统将可用磁盘空间分为两种主要区域类型：inode区域和数据区域。 UNIX文件系统为文件系统中的每个文件分配一个索引节点。文件的inode包含有关文件的关键元数据，例如其stat属性和指向其数据块的指针。数据区域被分成许多数据块（通常为8KB或更大），文件系统在其中存储文件数据和目录元数据。目录条目包含文件名和指向inode的指针。如果文件系统中的多个目录条目引用该文件的inode，则该文件被称为<code class="language-plaintext highlighter-rouge">hard-linked</code>。由于我们的文件系统将不支持硬链接，因此我们不需要这种间接连接，因此可以简化以下操作：我们的文件系统不使用索引节点，而只会存储文件（或子目录）的（唯一的）目录条目中描述所有内容。</p>
+
+<p>文件和目录在逻辑上都由一系列数据块组成，这些数据块可能分散在整个磁盘上，就像环境的虚拟地址空间的页面可以分散在整个物理内存中一样。文件系统环境隐藏了块布局的细节，提供了用于在文件内任意位置读取和写入字节序列的接口。文件系统环境在内部处理对目录的所有修改，这是执行诸如创建和删除文件之类的操作的一部分。我们的文件系统确实允许用户环境直接读取目录元数据（例如，通过<code class="language-plaintext highlighter-rouge">read</code>），这意味着用户环境可以自己执行目录扫描操作（例如，执行<code class="language-plaintext highlighter-rouge">ls</code>程序），而不必依赖于对文件系统的特殊调用。它使得在不改变应用程序或者重新编译应用程序的情况下，很难更改文件系统的内部布局，这是目录扫描方法的缺点，也是大多数现代UNIX的变体不鼓励这样做的原因。</p>
+
+<h3 id="扇区和块">扇区和块</h3>
+
+<p>大多数磁盘无法以字节为单位执行读取和写入，而是以扇区为单位执行读取和写入。在JOS中，每个扇区均为512字节。文件系统实际上以块为单位分配和使用磁盘存储。注意两个术语之间的区别：扇区大小是磁盘硬件的属性，而块大小是使用磁盘的操作系统的一个方面。文件系统的块大小必须是磁盘的扇区大小的倍数。</p>
+
+<p>UNIX xv6文件系统使用512字节的块大小，与磁盘的扇区大小相同。因为存储空间变得便宜得多了，并且以较大的粒度管理存储更加有效，所以大多数现代文件系统使用更大的块大小。我们的文件系统将使用4096字节的块大小，可以方便地匹配处理器的页面大小。</p>
+
+<h3 id="超级块">超级块</h3>
+
+<p>文件系统通常在磁盘的<code class="language-plaintext highlighter-rouge">易于查找的</code>位置（例如最开始或结尾）保留某些块，以保存描述整个文件系统属性（例如块大小）的元数据，磁盘大小，查找根目录所需的任何元数据，上次安装文件系统的时间，上次检查文件系统的错误的时间等等。这些特殊的块称为超级块。</p>
+
+<p>我们的文件系统将只有一个超级块，该超级块将始终位于磁盘上的块1中。其布局由<code class="language-plaintext highlighter-rouge">inc/fs.h</code>中的<code class="language-plaintext highlighter-rouge">struct Super</code>定义。块0通常被保留以容纳引导加载程序和分区表，因此文件系统通常不使用第一个磁盘块。许多<code class="language-plaintext highlighter-rouge">实际的</code>文件系统维护了多个超级块，这些超级块存放在磁盘的多个间隔较大的区域，存放着相同的数据。因此，如果其中一个损坏或磁盘在该区域中出现介质错误，仍可以找到其他超级块并将其用于访问文件系统。</p>
+
+<p><img src="/assets/images/posts/2020-01-11-xv6 lab5/01.png" alt="" /></p>
+
+<h3 id="文件元数据">文件元数据</h3>
+
+<p><code class="language-plaintext highlighter-rouge">inc/fs.h</code>中的<code class="language-plaintext highlighter-rouge">struct File</code>描述我们的文件系统中的元数据的布局。此元数据包括文件的名称，大小，类型（常规文件或目录），以及指向组成文件的块的指针。如上所述，我们没有inode，因此此元数据存储在磁盘上的目录条目中。与大多数的文件系统不同，为简单起见，我们将使用一种<code class="language-plaintext highlighter-rouge">File</code>结构来表示文件元数据，因为它同时出现在磁盘和内存中。</p>
+
+<p><code class="language-plaintext highlighter-rouge">struct File</code>中的<code class="language-plaintext highlighter-rouge">f_direct</code>数组包含用于存储文件的前10个（NDIRECT）块的块号的空间，我们将其称为文件的直接块。对于大小不超过10 * 4096 = 40KB的小文件，这意味着该文件所有块的块号将直接适合于File结构本身。但是，对于较大的文件，我们需要一个地方来容纳文件的其余块编号。因此，对于任何大于40KB的文件，我们分配一个额外的磁盘块，称为文件的间接块，以容纳4096/4 = 1024个额外的块号。因此，我们的文件系统允许文件的大小最大为1034块，刚好超过4M字节。为了支持更大的文件，<code class="language-plaintext highlighter-rouge">实际</code>文件系统通常还支持双重和三重间接块。</p>
+
+<p><img src="/assets/images/posts/2020-01-11-xv6 lab5/02.png" alt="" /></p>
+
+<h3 id="目录文件与普通文件">目录文件与普通文件</h3>
+
+<p>我们文件系统中的<code class="language-plaintext highlighter-rouge">File</code>结构可以代表常规文件或目录； 这两种类型的文件可以通过<code class="language-plaintext highlighter-rouge">文件</code>结构中的<code class="language-plaintext highlighter-rouge">type</code>字段来区分。文件系统以完全相同的方式管理普通文件和目录文件，只是它根本不解释与普通文件相关联的数据块的内容，而文件系统将目录文件的内容解释为一系列描述目录中文件和子目录的<code class="language-plaintext highlighter-rouge">File</code>结构。</p>
+
+<p>我们文件系统中的超级块包含一个<code class="language-plaintext highlighter-rouge">File</code>结构（<code class="language-plaintext highlighter-rouge">struct Super</code>中的根字段），其中包含文件系统根目录的元数据。该目录文件的内容是一系列<code class="language-plaintext highlighter-rouge">File</code>结构，描述了位于文件系统根目录中的文件和目录。根目录中的任何子目录都可能包含更多表示子子目录的File结构，依此类推。</p>
+
+<h2 id="磁盘访问">磁盘访问</h2>
+
+<p>操作系统中的文件系统环境需要能够访问磁盘，但是我们尚未在内核中实现任何磁盘访问功能。我们没有采取将IDE磁盘驱动程序以及允许文件系统访问内核的系统调用添加到内核的这种常规<code class="language-plaintext highlighter-rouge">整体</code>操作系统策略，而是将IDE磁盘驱动程序实现为用户级文件系统环境的一部分。我们仍然需要稍微修改内核，以便进行设置，方便文件系统环境实现磁盘访问本身所需的特权。</p>
+
+<p>只要我们依靠轮询，以及基于<code class="language-plaintext highlighter-rouge">编程I/O</code>（PIO）的磁盘访问并且不使用磁盘中断，就可以轻松的在用户空间中实现磁盘访问。也可以在用户模式下实现中断驱动设备的驱动程序（例如L3和L4内核执行此操作），但由于内核必须现场中断设备并将其分派到正确的用户模式环境，因此更加困难。</p>
+
+<p>x86处理器使用EFLAGS寄存器中的IOPL位来确定是否允许保护模式代码执行特殊的设备I/O指令，例如IN和OUT指令。由于我们需要访问的所有IDE磁盘寄存器都位于x86的<code class="language-plaintext highlighter-rouge">I/O</code>空间中，而不是位于内存映射中，因此，我们唯一需要做的就是为文件系统环境赋予<code class="language-plaintext highlighter-rouge">I/O特权</code>。允许文件系统访问这些寄存器。实际上，EFLAGS寄存器中的IOPL位为内核提供了一种简单的”all-or-nothing”方法，用于控制用户模式代码是否可以访问I/O空间。在我们的情况下，我们希望文件系统环境能够访问I/O空间，但是我们根本不希望任何其他环境能够访问I/O空间。</p>
+
+<h3 id="exercise-1">Exercise 1</h3>
+
+<p><code class="language-plaintext highlighter-rouge">i386_init</code>通过将<code class="language-plaintext highlighter-rouge">ENV_TYPE_FS</code>类型传递给你的环境创建函数<code class="language-plaintext highlighter-rouge">env_create</code>来标识文件系统环境。在<code class="language-plaintext highlighter-rouge">env.c</code>中修改<code class="language-plaintext highlighter-rouge">env_create</code>，以便它赋予文件系统环境I/O特权，但绝不将该特权赋予任何其他环境。</p>
+
+<p><code class="language-plaintext highlighter-rouge">kern/env.c env_create</code>的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span>
+<span class="nf">env_create</span><span class="p">(</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="n">binary</span><span class="p">,</span> <span class="k">enum</span> <span class="n">EnvType</span> <span class="n">type</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 3: Your code here.</span>
+    <span class="k">struct</span> <span class="n">Env</span> <span class="o">*</span><span class="n">e</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">r</span> <span class="o">=</span> <span class="n">env_alloc</span><span class="p">(</span><span class="o">&amp;</span><span class="n">e</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"env_alloc: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="n">load_icode</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">binary</span><span class="p">);</span>
+    <span class="n">e</span><span class="o">-&gt;</span><span class="n">env_type</span> <span class="o">=</span> <span class="n">type</span><span class="p">;</span>
+
+    <span class="c1">// If this is the file server (type == ENV_TYPE_FS) give it I/O privileges.</span>
+    <span class="c1">// LAB 5: Your code here.</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">type</span> <span class="o">==</span> <span class="n">ENV_TYPE_FS</span><span class="p">)</span>
+        <span class="n">e</span><span class="o">-&gt;</span><span class="n">env_tf</span><span class="p">.</span><span class="n">tf_eflags</span> <span class="o">|=</span> <span class="n">FL_IOPL_MASK</span><span class="p">;</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>确保可以启动文件环境而不会引起<code class="language-plaintext highlighter-rouge">General Protection</code>错误。你应该能通过<code class="language-plaintext highlighter-rouge">fs i/o</code>测试。</p>
+
+<h3 id="question-1">Question 1</h3>
+
+<p>当你随后从一种环境切换到另一种环境时，是否还需要执行其他操作以确保正确保存和还原此I/O特权设置？为什么？</p>
+
+<p>答案是不需要，因为切换环境需要保存当前环境的硬件上下文并且恢复下一个环境的硬件上下文。</p>
+
+<p>请注意，本实验中的<code class="language-plaintext highlighter-rouge">GNUmakefile</code>文件将QEMU设置为与以前一样，将文件<code class="language-plaintext highlighter-rouge">obj/kern/kernel.img</code>用作磁盘0（通常在<code class="language-plaintext highlighter-rouge">DOS/Windows</code>下为<code class="language-plaintext highlighter-rouge">Drive C</code>）的映像，并使用（新）文件<code class="language-plaintext highlighter-rouge">obj/fs/fs.img</code>作为磁盘1（<code class="language-plaintext highlighter-rouge">Drive D</code>）的​​映像。在本实验中，我们的文件系统只能接触磁盘1；磁盘0仅用于引导内核。如果想以某种方式损坏任何一个磁盘映像，则只需键入以下命令，即可将它们都重置为其“原始”版本：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">rm </span>obj/kern/kernel.img obj/fs/fs.img
+make
+</code></pre></div></div>
+
+<p>或通过执行以下操作：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>make clean
+make
+</code></pre></div></div>
+
+<h2 id="块缓存">块缓存</h2>
+
+<p>在我们的文件系统中，我们将借助处理器的虚拟内存系统实现一个简单的<code class="language-plaintext highlighter-rouge">buffer cache</code>（实际上只是一个块缓存）。块缓存的代码在<code class="language-plaintext highlighter-rouge">fs/bc.c</code>中。</p>
+
+<p>我们的文件系统将只能处理3GB或更小的磁盘。我们在文件系统环境的地址空间为磁盘的<code class="language-plaintext highlighter-rouge">内存映射</code>保留了固定的3GB区域，从0x10000000（<code class="language-plaintext highlighter-rouge">DISKMAP</code>）到0xD0000000（<code class="language-plaintext highlighter-rouge">DISKMAP + DISKMAX</code>）。例如，磁盘块0映射到虚拟地址0x10000000，磁盘块1映射到虚拟地址0x10001000，依此类推。<code class="language-plaintext highlighter-rouge">fs/bc.c</code>中的<code class="language-plaintext highlighter-rouge">diskaddr</code>函数实现了从磁盘块号到虚拟地址的转换（以及一些完整性检查）。</p>
+
+<p>由于我们的文件系统环境具有自己的虚拟地址空间，而与系统中其他的环境的虚拟地址空间无关，并且文件系统环境唯一需要做的就是实现文件访问，因此以这种方式保留大多数文件系统环境的地址空间是合理的。由于现代磁盘大于3GB，因此在32位计算机上执行实际文件系统会很尴尬。在具有64位地址空间的计算机上，这种缓冲区高速缓存管理方法可能仍然是合理的。</p>
+
+<p>当然，将整个磁盘读入内存将花费很长时间，因此，我们将实现一种需求分页的形式，其中我们仅在磁盘映射区域中分配页面，并响应页面错误而从磁盘中读取相应的块。该区域中的，这样，我们可以假装整个磁盘都在内存中。</p>
+
+<h3 id="exercise-2">Exercise 2</h3>
+
+<p>在<code class="language-plaintext highlighter-rouge">fs/bc.c</code>中实现<code class="language-plaintext highlighter-rouge">bc_pgfault</code>和<code class="language-plaintext highlighter-rouge">flush_block</code>函数。<code class="language-plaintext highlighter-rouge">bc_pgfault</code>是一个页面错误处理程序，就像你在上一个实验中为实现写时复制实现的页面处理程序一样，不同之处在于<code class="language-plaintext highlighter-rouge">bc_pgfault</code>的工作是响应页面错误并从磁盘加载页面。编写此代码时，请记住，（1）<code class="language-plaintext highlighter-rouge">addr</code>可能未与块边界对齐，并且（2）<code class="language-plaintext highlighter-rouge">ide_read</code>是以扇区为单位操作而不是以块为单位操作。</p>
+
+<p>必要时，<code class="language-plaintext highlighter-rouge">flush_block</code>函数应将一个块写入到磁盘。如果该块甚至不在块缓存中（即页面未映射）或它没有设置脏位，则<code class="language-plaintext highlighter-rouge">flush_block</code>不应执行任何操作。我们将使用VM硬件来跟踪上一次对磁盘的操作是否修改了磁盘块。要查看某个块是否需要写入，我们可以看看是否在uvpt条目中设置了<code class="language-plaintext highlighter-rouge">PTE_D</code> <code class="language-plaintext highlighter-rouge">dirty</code>位。 （PTE_D位由处理器根据对该页面的写入进行设置；请参见386参考手册<a href="http://pdos.csail.mit.edu/6.828/2011/readings/i386/s05_02.htm">第5章</a>中的5.2.4.3。）将块写入磁盘后，<code class="language-plaintext highlighter-rouge">flush_block</code>应使用<code class="language-plaintext highlighter-rouge">sys_page_map</code>清除<code class="language-plaintext highlighter-rouge">PTE_D</code>位。</p>
+
+<p>·fs/bc.c bc_pgfault`的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">// LAB 5: you code here:</span>
+    <span class="n">addr</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="n">ROUNDDOWN</span><span class="p">(</span><span class="n">addr</span><span class="p">,</span> <span class="n">PGSIZE</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_alloc</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">addr</span><span class="p">,</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_W</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"In bc_pgfault, sys_page_alloc: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">ide_read</span><span class="p">(</span><span class="n">blockno</span> <span class="o">*</span> <span class="n">BLKSECTS</span><span class="p">,</span> <span class="n">addr</span><span class="p">,</span> <span class="n">BLKSECTS</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"In bc_pgfault, ide_read: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">fs/bc.c flush_block</code>的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span>
+<span class="nf">flush_block</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">addr</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">blockno</span> <span class="o">=</span> <span class="p">((</span><span class="kt">uint32_t</span><span class="p">)</span><span class="n">addr</span> <span class="o">-</span> <span class="n">DISKMAP</span><span class="p">)</span> <span class="o">/</span> <span class="n">BLKSIZE</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">addr</span> <span class="o">&lt;</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">DISKMAP</span> <span class="o">||</span> <span class="n">addr</span> <span class="o">&gt;=</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)(</span><span class="n">DISKMAP</span> <span class="o">+</span> <span class="n">DISKSIZE</span><span class="p">))</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"flush_block of bad va %08x"</span><span class="p">,</span> <span class="n">addr</span><span class="p">);</span>
+
+    <span class="c1">// LAB 5: Your code here.</span>
+    <span class="c1">//panic("flush_block not implemented");</span>
+    <span class="n">addr</span> <span class="o">=</span> <span class="n">ROUNDDOWN</span><span class="p">(</span><span class="n">addr</span><span class="p">,</span> <span class="n">PGSIZE</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">va_is_mapped</span><span class="p">(</span><span class="n">addr</span><span class="p">)</span> <span class="o">==</span> <span class="nb">false</span> <span class="o">||</span> <span class="n">va_is_dirty</span><span class="p">(</span><span class="n">addr</span><span class="p">)</span> <span class="o">==</span> <span class="nb">false</span><span class="p">)</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">r</span><span class="p">;</span>
+    <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">ide_write</span><span class="p">(</span><span class="n">blockno</span> <span class="o">*</span> <span class="n">BLKSECTS</span><span class="p">,</span> <span class="n">addr</span><span class="p">,</span> <span class="n">BLKSECTS</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"In flush_block, ide_write: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_map</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">addr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">addr</span><span class="p">,</span> <span class="n">uvpt</span><span class="p">[</span><span class="n">PGNUM</span><span class="p">(</span><span class="n">addr</span><span class="p">)]</span> <span class="o">&amp;</span> <span class="n">PTE_SYSCALL</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span><span class="c1">//清除PTE_D</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"In flush_block, sys_page_map: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>使用<code class="language-plaintext highlighter-rouge">make grade</code>测试你的代码。你的代码应通过<code class="language-plaintext highlighter-rouge">check_bc</code>，<code class="language-plaintext highlighter-rouge">check_super</code>和<code class="language-plaintext highlighter-rouge">check_bitmap</code>。</p>
+
+<p><code class="language-plaintext highlighter-rouge">fs/fs.c</code>中的<code class="language-plaintext highlighter-rouge">fs_init</code>函数是例子，告诉我们如何使用块缓存。初始化块高速缓存后，它仅将指针存储到全局变量<code class="language-plaintext highlighter-rouge">super</code>中的磁盘映射区域中。此后，我们可以简单地从<code class="language-plaintext highlighter-rouge">super</code>中读取它们，就像它们在内存中一样，并且页面错误处理程序将根据需要从磁盘中读取它们。</p>
+
+<h2 id="the-block-bitmap">The Block Bitmap</h2>
+
+<p>在<code class="language-plaintext highlighter-rouge">fs_init</code>设置了<code class="language-plaintext highlighter-rouge">bitmap</code>指针之后，我们可以将<code class="language-plaintext highlighter-rouge">bitmap</code>视为位的打包数组，磁盘上每个块一个。参见，例如，<code class="language-plaintext highlighter-rouge">block_is_free</code>，其仅检查在位图中是否将给定块标记为空闲。</p>
+
+<h3 id="exercise-3">Exercise 3</h3>
+
+<p>使用<code class="language-plaintext highlighter-rouge">free_block</code>作为模型在<code class="language-plaintext highlighter-rouge">fs/fs.c</code>中实现<code class="language-plaintext highlighter-rouge">alloc_block</code>，后者应在位图中找到可用的磁盘块，将其标记为已使用，然后返回该块的编号。分配块时，应立即使用<code class="language-plaintext highlighter-rouge">flush_block</code>将更改后的位图块刷新到磁盘，以帮助文件系统保持一致。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// 在位图上搜索空闲块并分配它。分配块时，请立即将更改的位图块刷新到磁盘。</span>
+<span class="c1">// Return block number allocated on success,</span>
+<span class="c1">// -E_NO_DISK if we are out of blocks.</span>
+<span class="c1">//</span>
+<span class="c1">// Hint: use free_block as an example for manipulating the bitmap.</span>
+<span class="kt">int</span>
+<span class="nf">alloc_block</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 位图由一个或多个块组成。单个位图块包含BLKBITSIZE个位。磁盘中总共有super-&gt; s_nblocks个块。</span>
+    <span class="c1">// LAB 5: Your code here.</span>
+    <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">super</span><span class="o">-&gt;</span><span class="n">s_nblocks</span><span class="p">;</span> <span class="n">i</span> <span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span><span class="p">(</span><span class="n">block_is_free</span><span class="p">(</span><span class="n">i</span><span class="p">))</span> <span class="p">{</span>
+            <span class="n">bitmap</span><span class="p">[</span><span class="n">i</span><span class="o">/</span><span class="mi">32</span><span class="p">]</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">i</span> <span class="o">%</span> <span class="mi">32</span><span class="p">));</span> <span class="c1">//bitmap的位，1代表free，0代表被使用</span>
+            <span class="n">flush_block</span><span class="p">(</span><span class="n">bitmap</span><span class="p">);</span>
+            <span class="k">return</span> <span class="n">i</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="o">-</span><span class="n">E_NO_DISK</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>使用<code class="language-plaintext highlighter-rouge">make grade</code>测试你的代码。你的代码现在应该能通过<code class="language-plaintext highlighter-rouge">alloc_block</code>。</p>
+
+<h2 id="文件操作">文件操作</h2>
+
+<p>我们在<code class="language-plaintext highlighter-rouge">fs/fs.c</code>中提供了各种功能，以实现解释和管理文件结构，扫描和管理目录文件条目以及从根目录遍历文件系统以解析绝对地址所需的基本功能。通读<code class="language-plaintext highlighter-rouge">fs/fs.c</code>中的所有代码，并确保在继续操作之前了解每个函数的功能。</p>
+
+<p><code class="language-plaintext highlighter-rouge">walk_path</code>函数，通过传进来的path的路径名，找到文件和目录，将文件存储在pf中，目录存储在pdir中，文件名或者目录名存放在lastelem中。</p>
+
+<p><code class="language-plaintext highlighter-rouge">dir_alloc_file</code>函数，将file存放在dir中，都是File结构体。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">File</span> <span class="p">{</span>
+    <span class="kt">char</span> <span class="n">f_name</span><span class="p">[</span><span class="n">MAXNAMELEN</span><span class="p">];</span>    <span class="c1">// 文件名</span>
+    <span class="kt">off_t</span> <span class="n">f_size</span><span class="p">;</span>               <span class="c1">// 文件大小（以字节为单位）</span>
+    <span class="kt">uint32_t</span> <span class="n">f_type</span><span class="p">;</span>            <span class="c1">// 文件类型</span>
+
+    <span class="c1">// Block pointers.</span>
+    <span class="c1">// 如果一个块的分配值为！= 0，则分配该块。</span>
+    <span class="kt">uint32_t</span> <span class="n">f_direct</span><span class="p">[</span><span class="n">NDIRECT</span><span class="p">];</span> <span class="c1">// direct blocks</span>
+    <span class="kt">uint32_t</span> <span class="n">f_indirect</span><span class="p">;</span>        <span class="c1">// indirect block</span>
+    <span class="c1">// 填充字符</span>
+    <span class="c1">// Pad out to 256 bytes; must do arithmetic in case we're compiling fsformat on a 64-bit machine.</span>
+    <span class="kt">uint8_t</span> <span class="n">f_pad</span><span class="p">[</span><span class="mi">256</span> <span class="o">-</span> <span class="n">MAXNAMELEN</span> <span class="o">-</span> <span class="mi">8</span> <span class="o">-</span> <span class="mi">4</span><span class="o">*</span><span class="n">NDIRECT</span> <span class="o">-</span> <span class="mi">4</span><span class="p">];</span>
+<span class="p">}</span> <span class="n">__attribute__</span><span class="p">((</span><span class="n">packed</span><span class="p">));</span>      <span class="c1">// 仅在某些64位计算机上需要</span>
+</code></pre></div></div>
+
+<h3 id="exercise-4">Exercise 4</h3>
+
+<p>实现<code class="language-plaintext highlighter-rouge">file_block_walk</code>和<code class="language-plaintext highlighter-rouge">file_get_block</code>。<code class="language-plaintext highlighter-rouge">file_block_walk</code>从文件中的块偏移量映射到<code class="language-plaintext highlighter-rouge">struct File</code>或间接块中指向这块的指针，类似于<code class="language-plaintext highlighter-rouge">pgdir_walk</code>对页表所做的操作。<code class="language-plaintext highlighter-rouge">file_get_block</code>更进一步，并映射到实际的磁盘块，并在必要时分配一个新的磁盘块。</p>
+
+<p>file_block_walk的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// 在文件“f”中找到“filebno”对应的磁盘块号。</span>
+<span class="c1">// 将“*ppdiskbno”设置为指向对应的磁盘块号。</span>
+<span class="c1">// 该插槽将是f-&gt;f_direct[]条目之一，或者是间接块中的条目。</span>
+<span class="c1">// 当设置了'alloc'时，该函数将在必要时分配一个间接块。</span>
+<span class="c1">//</span>
+<span class="c1">// Returns:</span>
+<span class="c1">//  0 on success (but note that *ppdiskbno might equal 0).</span>
+<span class="c1">//  -E_NOT_FOUND if the function needed to allocate an indirect block, but</span>
+<span class="c1">//      alloc was 0.</span>
+<span class="c1">//  -E_NO_DISK if there's no space on the disk for an indirect block.</span>
+<span class="c1">//  -E_INVAL if filebno is out of range (it's &gt;= NDIRECT + NINDIRECT).</span>
+<span class="c1">//</span>
+<span class="c1">// Analogy: This is like pgdir_walk for files.</span>
+<span class="c1">// Hint: Don't forget to clear any block you allocate.</span>
+<span class="k">static</span> <span class="kt">int</span>
+<span class="nf">file_block_walk</span><span class="p">(</span><span class="k">struct</span> <span class="n">File</span> <span class="o">*</span><span class="n">f</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">filebno</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="o">**</span><span class="n">ppdiskbno</span><span class="p">,</span> <span class="n">bool</span> <span class="n">alloc</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 5: Your code here.</span>
+    <span class="c1">// panic("file_block_walk not implemented");</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">filebno</span> <span class="o">&gt;=</span> <span class="n">NDIRECT</span> <span class="o">+</span> <span class="n">NINDIRECT</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">E_INVAL</span><span class="p">;</span>
+
+    <span class="kt">int</span> <span class="n">bn</span><span class="p">;</span> <span class="c1">// 块号</span>
+    <span class="kt">uint32_t</span> <span class="o">*</span><span class="n">indirects_addr</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">filebno</span> <span class="o">&lt;</span> <span class="n">NDIRECT</span><span class="p">)</span> <span class="p">{</span>
+        <span class="o">*</span><span class="n">ppdiskbno</span> <span class="o">=</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">f</span><span class="o">-&gt;</span><span class="n">f_direct</span><span class="p">[</span><span class="n">filebno</span><span class="p">]);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">f</span><span class="o">-&gt;</span><span class="n">f_indirect</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">indirects_addr</span> <span class="o">=</span> <span class="n">diskaddr</span><span class="p">(</span><span class="n">f</span><span class="o">-&gt;</span><span class="n">f_indirect</span><span class="p">);</span><span class="c1">// f_indirect存放间接块的地址，该块存放文件内容存放的块号</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">alloc</span><span class="p">)</span>
+                <span class="k">return</span> <span class="o">-</span><span class="n">E_NOT_FOUND</span><span class="p">;</span>
+            <span class="k">if</span> <span class="p">((</span><span class="n">bn</span> <span class="o">=</span> <span class="n">alloc_block</span><span class="p">())</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">bn</span><span class="p">;</span>
+            <span class="n">f</span><span class="o">-&gt;</span><span class="n">f_indirect</span> <span class="o">=</span> <span class="n">bn</span><span class="p">;</span>
+            <span class="n">indirects_addr</span> <span class="o">=</span> <span class="n">diskaddr</span><span class="p">(</span><span class="n">bn</span><span class="p">);</span>
+            <span class="c1">// flush_block(indirects_addr);</span>
+        <span class="p">}</span>
+        <span class="o">*</span><span class="n">ppdiskbno</span> <span class="o">=</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">indirects_addr</span><span class="p">[</span><span class="n">filebno</span> <span class="o">-</span> <span class="n">NDIRECT</span><span class="p">]);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>file_get_block函数代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// 将*blk设置为将映射文件'f'的第filebno块的内存地址。</span>
+<span class="c1">//</span>
+<span class="c1">// Returns 0 on success, &lt; 0 on error.  Errors are:</span>
+<span class="c1">//  -E_NO_DISK if a block needed to be allocated but the disk is full.</span>
+<span class="c1">//  -E_INVAL if filebno is out of range.</span>
+<span class="c1">//</span>
+<span class="c1">// Hint: Use file_block_walk and alloc_block.</span>
+<span class="kt">int</span>
+<span class="nf">file_get_block</span><span class="p">(</span><span class="k">struct</span> <span class="n">File</span> <span class="o">*</span><span class="n">f</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">filebno</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">blk</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 5: Your code here.</span>
+    <span class="c1">// panic("file_get_block not implemented");</span>
+    <span class="kt">uint32_t</span><span class="o">*</span> <span class="n">ppdiskbno</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">r</span><span class="p">;</span>
+    <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">file_block_walk</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">filebno</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ppdiskbno</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+
+    <span class="k">if</span><span class="p">((</span><span class="o">*</span><span class="n">ppdiskbno</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">alloc_block</span><span class="p">();</span>
+        <span class="k">if</span><span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+        <span class="k">else</span>
+            <span class="o">*</span><span class="n">ppdiskbno</span> <span class="o">=</span> <span class="n">r</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="o">*</span><span class="n">blk</span> <span class="o">=</span> <span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="n">diskaddr</span><span class="p">(</span><span class="o">*</span><span class="n">ppdiskbno</span><span class="p">);</span>
+    <span class="n">flush_block</span><span class="p">(</span><span class="o">*</span><span class="n">blk</span><span class="p">);</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>使用<code class="language-plaintext highlighter-rouge">make grade</code>测试你的代码。你的代码应通过<code class="language-plaintext highlighter-rouge">file_open</code>，<code class="language-plaintext highlighter-rouge">file_get_block</code>，<code class="language-plaintext highlighter-rouge">file_flush/file_truncated/file rewrite</code>和<code class="language-plaintext highlighter-rouge">testfile</code>。</p>
+
+<p><code class="language-plaintext highlighter-rouge">file_block_walk</code>和<code class="language-plaintext highlighter-rouge">file_get_block</code>是文件系统的关键部分。</p>
+
+<h2 id="文件系统接口">文件系统接口</h2>
+
+<p>现在我们已经在文件系统环境本身中具有必要的功能，我们必须使它可以被希望使用文件系统的其他环境访问。由于其他环境无法直接在文件系统环境中调用函数，因此我们将通过基于JOS的IPC机制构建的远程程序调用或RPC（抽象）公开对文件系统环境的访问。在图形上，这是对文件系统服务器的调用（例如，读取）的样子</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
+      Regular env           FS env
+   +---------------+   +---------------+
+   |      read     |   |   file_read   |
+   |   (lib/fd.c)  |   |   (fs/fs.c)   |
+...|.......|.......|...|.......^.......|...............
+   |       v       |   |       |       | RPC mechanism
+   |  devfile_read |   |  serve_read   |
+   |  (lib/file.c) |   |  (fs/serv.c)  |
+   |       |       |   |       ^       |
+   |       v       |   |       |       |
+   |     fsipc     |   |     serve     |
+   |  (lib/file.c) |   |  (fs/serv.c)  |
+   |       |       |   |       ^       |
+   |       v       |   |       |       |
+   |   ipc_send    |   |   ipc_recv    |
+   |       |       |   |       ^       |
+   +-------|-------+   +-------|-------+
+           |                   |
+           +-------------------+
+</code></pre></div></div>
+
+<p>虚线下方的所有内容仅是将读取请求从常规环境传送到文件系统环境的机制。从一开始，<code class="language-plaintext highlighter-rouge">read</code>（我们提供的）就可以在任何文件描述符上工作，并简单地分派到适当的设备读取功能，这就是<code class="language-plaintext highlighter-rouge">devfile_read</code>（我们可以有更多设备类型，例如管道）。<code class="language-plaintext highlighter-rouge">devfile_read</code>实现专门针对磁盘文件的读取。<code class="language-plaintext highlighter-rouge">lib/file.c</code>中的此函数和其他<code class="language-plaintext highlighter-rouge">devfile_*</code>函数实现了FS操作的客户端，并且所有工作均以大致相同的方式进行，将参数捆绑在请求结构中，调用<code class="language-plaintext highlighter-rouge">fsipc</code>发送IPC请求，然后解包并返回结果。<code class="language-plaintext highlighter-rouge">fsipc</code>函数仅处理将请求发送到服务器并接收答复的常见细节。</p>
+
+<p>文件系统服务器代码可以在<code class="language-plaintext highlighter-rouge">fs/serv.c</code>中找到。它循环执行服务功能，无休止地通过IPC接收请求，将该请求分派到适当的处理程序，然后通过IPC发回结果。在示例中，<code class="language-plaintext highlighter-rouge">serve</code>将分派到<code class="language-plaintext highlighter-rouge">serve_read</code>，后者将处理IPC的详细信息，例如解压缩请求结构并最终调用<code class="language-plaintext highlighter-rouge">file_read</code>来实际执行文件读取。</p>
+
+<p>回想一下，JOS的IPC机制使环境可以发送单个32位的值，并可以选择共享页面。要将请求从客户端发送到服务器，我们使用32位的值作为请求类型（对文件系统服务器RPC进行编号，就像对系统调用进行编号一样），并将请求的参数存储在IPC共享的页面的<code class="language-plaintext highlighter-rouge">union Fsipc</code>上。在客户端，我们总是在<code class="language-plaintext highlighter-rouge">fsipcbuf</code>的共享页面上传输数据；在服务器端，我们将传入的请求页面映射到<code class="language-plaintext highlighter-rouge">fsreq</code>（<code class="language-plaintext highlighter-rouge">0x0ffff000</code>）。</p>
+
+<p>服务器还通过IPC发回响应。我们使用32位数字作为函数的返回码。对于大多数RPC，这就是它们返回的全部。<code class="language-plaintext highlighter-rouge">FSREQ_READ</code>和<code class="language-plaintext highlighter-rouge">FSREQ_STAT</code>也返回数据，它们只是将数据写入客户端发送的请求的页面。因为客户端首先将其与文件系统服务器共享页面，所以无需在响应IPC中发送此页面。同样，在响应中，<code class="language-plaintext highlighter-rouge">FSREQ_OPEN</code>与客户端共享一个新的<code class="language-plaintext highlighter-rouge">Fd page</code>。我们将很快返回文件描述符页面。</p>
+
+<h3 id="exercise-5">Exercise 5</h3>
+
+<p>在<code class="language-plaintext highlighter-rouge">fs/serv.c</code>中实现<code class="language-plaintext highlighter-rouge">serve_read</code>。</p>
+
+<p><code class="language-plaintext highlighter-rouge">serve_read</code>的繁重工作将由<code class="language-plaintext highlighter-rouge">fs/fs.c</code>中已经实现的<code class="language-plaintext highlighter-rouge">file_read</code>来完成（反过来，这只是对<code class="language-plaintext highlighter-rouge">file_get_block</code>的一堆调用）。<code class="language-plaintext highlighter-rouge">serve_read</code>只需提供RPC接口即可读取文件。查看<code class="language-plaintext highlighter-rouge">serve_set_size</code>中的注释和代码，以大致了解服务器功能的结构。</p>
+
+<p>文件系统服务器为每个打开的文件维护了三个结构。</p>
+
+<ol>
+  <li>
+    <p>磁盘上的<code class="language-plaintext highlighter-rouge">struct File</code>被映射到映射磁盘的内存部分。该内存是文件服务器私有的。</p>
+  </li>
+  <li>
+    <p>每个打开的文件也都有一个<code class="language-plaintext highlighter-rouge">struct Fd</code>，它对应于一个Unix文件描述符。这个<code class="language-plaintext highlighter-rouge">struct Fd</code>被当作内存的一部分，并且与任何打开文件的环境共享。</p>
+  </li>
+  <li>
+    <p><code class="language-plaintext highlighter-rouge">struct OpenFile</code>链接其他两个结构，并且是文件服务器的私有部分。服务器维护所有打开文件的数组，并按<code class="language-plaintext highlighter-rouge">file ID</code>索引。（最多可以同时打开<code class="language-plaintext highlighter-rouge">MAXOPEN</code>文件。）客户端使用文件ID与服务器进行通信。文件ID与内核中的环境ID非常相似。使用<code class="language-plaintext highlighter-rouge">openfile_lookup</code>将文件ID转换为结构<code class="language-plaintext highlighter-rouge">OpenFile</code>。</p>
+  </li>
+</ol>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// 从ipc-&gt;read.req_fileid中的当前查找位置读取最多ipc-&gt;read.req_n个字节。</span>
+<span class="c1">// 在ipc-&gt;readRet中将从文件读取的字节返回给调用方，然后更新查找位置。</span>
+<span class="c1">// 返回成功读取的字节数，如果错误，则返回&lt;0。</span>
+<span class="kt">int</span>
+<span class="nf">serve_read</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">envid</span><span class="p">,</span> <span class="k">union</span> <span class="n">Fsipc</span> <span class="o">*</span><span class="n">ipc</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">Fsreq_read</span> <span class="o">*</span><span class="n">req</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">ipc</span><span class="o">-&gt;</span><span class="n">read</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">Fsret_read</span> <span class="o">*</span><span class="n">ret</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">ipc</span><span class="o">-&gt;</span><span class="n">readRet</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">debug</span><span class="p">)</span>
+        <span class="n">cprintf</span><span class="p">(</span><span class="s">"serve_read %08x %08x %08x</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">envid</span><span class="p">,</span> <span class="n">req</span><span class="o">-&gt;</span><span class="n">req_fileid</span><span class="p">,</span> <span class="n">req</span><span class="o">-&gt;</span><span class="n">req_n</span><span class="p">);</span>
+
+    <span class="c1">// Lab 5: Your code here:</span>
+    <span class="k">struct</span> <span class="n">OpenFile</span> <span class="o">*</span><span class="n">o</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">r</span> <span class="o">=</span> <span class="n">openfile_lookup</span><span class="p">(</span><span class="n">envid</span><span class="p">,</span> <span class="n">req</span><span class="o">-&gt;</span><span class="n">req_fileid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">o</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+
+    <span class="n">r</span> <span class="o">=</span> <span class="n">file_read</span><span class="p">(</span><span class="n">o</span><span class="o">-&gt;</span><span class="n">o_file</span><span class="p">,</span> <span class="n">ret</span><span class="o">-&gt;</span><span class="n">ret_buf</span><span class="p">,</span> <span class="n">req</span><span class="o">-&gt;</span><span class="n">req_n</span><span class="p">,</span> <span class="n">o</span><span class="o">-&gt;</span><span class="n">o_fd</span><span class="o">-&gt;</span><span class="n">fd_offset</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+
+    <span class="n">o</span><span class="o">-&gt;</span><span class="n">o_fd</span><span class="o">-&gt;</span><span class="n">fd_offset</span> <span class="o">+=</span> <span class="n">r</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>使用<code class="language-plaintext highlighter-rouge">make grade</code>测试你的代码。你的代码应通过<code class="language-plaintext highlighter-rouge">serve_open/file_stat/file_close</code>和<code class="language-plaintext highlighter-rouge">file_read</code>，得分为70/150。</p>
+
+<p>70分是还需要通过<code class="language-plaintext highlighter-rouge">Protection I/O space: OK (0.9s)</code></p>
+
+<h3 id="exercise-6">Exercise 6</h3>
+
+<p>Implement <code class="language-plaintext highlighter-rouge">serve_write</code> in <code class="language-plaintext highlighter-rouge">fs/serv.c</code> and <code class="language-plaintext highlighter-rouge">devfile_write</code> in <code class="language-plaintext highlighter-rouge">lib/file.c</code>.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// 从当前查找位置开始，将req-&gt;req_buf中的req-&gt;req_n个字节写入req_fileid，并相应地更新查找位置。</span>
+<span class="c1">// 如有必要，扩展文件。 返回写入的字节数，如果错误，则返回&lt;0。</span>
+<span class="kt">int</span>
+<span class="nf">serve_write</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">envid</span><span class="p">,</span> <span class="k">struct</span> <span class="n">Fsreq_write</span> <span class="o">*</span><span class="n">req</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">debug</span><span class="p">)</span>
+        <span class="n">cprintf</span><span class="p">(</span><span class="s">"serve_write %08x %08x %08x</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">envid</span><span class="p">,</span> <span class="n">req</span><span class="o">-&gt;</span><span class="n">req_fileid</span><span class="p">,</span> <span class="n">req</span><span class="o">-&gt;</span><span class="n">req_n</span><span class="p">);</span>
+
+    <span class="c1">// LAB 5: Your code here.</span>
+    <span class="c1">//panic("serve_write not implemented");</span>
+    <span class="k">struct</span> <span class="n">OpenFile</span> <span class="o">*</span><span class="n">o</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">r</span> <span class="o">=</span> <span class="n">openfile_lookup</span><span class="p">(</span><span class="n">envid</span><span class="p">,</span> <span class="n">req</span><span class="o">-&gt;</span><span class="n">req_fileid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">o</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+
+    <span class="n">r</span> <span class="o">=</span> <span class="n">file_write</span><span class="p">(</span><span class="n">o</span><span class="o">-&gt;</span><span class="n">o_file</span><span class="p">,</span> <span class="n">req</span><span class="o">-&gt;</span><span class="n">req_buf</span><span class="p">,</span> <span class="n">req</span><span class="o">-&gt;</span><span class="n">req_n</span><span class="p">,</span> <span class="n">o</span><span class="o">-&gt;</span><span class="n">o_fd</span><span class="o">-&gt;</span><span class="n">fd_offset</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+    <span class="n">o</span><span class="o">-&gt;</span><span class="n">o_fd</span><span class="o">-&gt;</span><span class="n">fd_offset</span> <span class="o">+=</span> <span class="n">r</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Write at most 'n' bytes from 'buf' to 'fd' at the current seek position.</span>
+<span class="c1">//</span>
+<span class="c1">// Returns:</span>
+<span class="c1">//   The number of bytes successfully written.</span>
+<span class="c1">//   &lt; 0 on error.</span>
+<span class="k">static</span> <span class="kt">ssize_t</span>
+<span class="nf">devfile_write</span><span class="p">(</span><span class="k">struct</span> <span class="n">Fd</span> <span class="o">*</span><span class="n">fd</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">n</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Make an FSREQ_WRITE request to the file system server.  Be</span>
+    <span class="c1">// careful: fsipcbuf.write.req_buf is only so large, but</span>
+    <span class="c1">// remember that write is always allowed to write *fewer*</span>
+    <span class="c1">// bytes than requested.</span>
+    <span class="c1">// LAB 5: Your code here</span>
+    <span class="c1">//panic("devfile_write not implemented");</span>
+    <span class="n">fsipcbuf</span><span class="p">.</span><span class="n">write</span><span class="p">.</span><span class="n">req_fileid</span> <span class="o">=</span> <span class="n">fd</span><span class="o">-&gt;</span><span class="n">fd_file</span><span class="p">.</span><span class="n">id</span><span class="p">;</span>
+    <span class="n">fsipcbuf</span><span class="p">.</span><span class="n">write</span><span class="p">.</span><span class="n">req_n</span> <span class="o">=</span> <span class="n">n</span><span class="p">;</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">fsipcbuf</span><span class="p">.</span><span class="n">write</span><span class="p">.</span><span class="n">req_buf</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">fsipc</span><span class="p">(</span><span class="n">FSREQ_WRITE</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span> <span class="c1">//第二位参数只有在是需要读取数据的时候才设置</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Use <code class="language-plaintext highlighter-rouge">make grade</code> to test your code. Your code should pass <code class="language-plaintext highlighter-rouge">file_write</code>, <code class="language-plaintext highlighter-rouge">file_read after file_write</code>, <code class="language-plaintext highlighter-rouge">open</code>, and <code class="language-plaintext highlighter-rouge">large file</code> for a score of 90/150.</p>
+
+<p>在<code class="language-plaintext highlighter-rouge">kern/init.c</code>下的i386_init()少了一个加锁，应该是在分支合并的时候出了问题</p>
+
+<h2 id="spawning-processes">Spawning Processes</h2>
+
+<p><code class="language-plaintext highlighter-rouge">spawn</code>的代码（请参阅<code class="language-plaintext highlighter-rouge">lib/spawn.c</code>）将创建一个新环境，将文件系统中的程序映像加载到其中，然后启动子环境运行该程序。然后，父进程继续独立于子进程继续运行。在UNIX中，<code class="language-plaintext highlighter-rouge">spawn</code>函数的作用类似于<code class="language-plaintext highlighter-rouge">fork</code>后的子进程中紧跟的<code class="language-plaintext highlighter-rouge">exec</code>。</p>
+
+<p>我们实现了<code class="language-plaintext highlighter-rouge">spawn</code>而不是UNIX风格的<code class="language-plaintext highlighter-rouge">exec</code>，因为在用户空间中以<code class="language-plaintext highlighter-rouge">exokernel fashion</code>更容易实现<code class="language-plaintext highlighter-rouge">spawn</code>，无需内核的帮助。考虑一下要在用户空间中实现<code class="language-plaintext highlighter-rouge">exec</code>所必须执行的操作，并确保您了解为什么这样做更难。</p>
+
+<h3 id="exercise-7">Exercise 7</h3>
+
+<p><code class="language-plaintext highlighter-rouge">spawn</code>依赖于新的系统调用<code class="language-plaintext highlighter-rouge">sys_env_set_trapframe</code>来初始化新创建的环境的状态。在<code class="language-plaintext highlighter-rouge">kern/syscall.c</code>中实现<code class="language-plaintext highlighter-rouge">sys_env_set_trapframe</code>（不要忘记在<code class="language-plaintext highlighter-rouge">syscall()</code>中调用新的系统调用）。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Set envid's trap frame to 'tf'.</span>
+<span class="c1">// tf is modified to make sure that user environments always run at code</span>
+<span class="c1">// protection level 3 (CPL 3), interrupts enabled, and IOPL of 0.</span>
+<span class="c1">//</span>
+<span class="c1">// Returns 0 on success, &lt; 0 on error.  Errors are:</span>
+<span class="c1">//  -E_BAD_ENV if environment envid doesn't currently exist,</span>
+<span class="c1">//      or the caller doesn't have permission to change envid.</span>
+<span class="k">static</span> <span class="kt">int</span>
+<span class="nf">sys_env_set_trapframe</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">envid</span><span class="p">,</span> <span class="k">struct</span> <span class="n">Trapframe</span> <span class="o">*</span><span class="n">tf</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 5: Your code here.</span>
+    <span class="c1">// Remember to check whether the user has supplied us with a good</span>
+    <span class="c1">// address!</span>
+    <span class="k">struct</span> <span class="n">Env</span><span class="o">*</span> <span class="n">env</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">r</span> <span class="o">=</span> <span class="n">envid2env</span><span class="p">(</span><span class="n">envid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">env</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+
+    <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_eflags</span> <span class="o">|=</span> <span class="n">FL_IF</span><span class="p">;</span> <span class="c1">//开启中断</span>
+    <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_eflags</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">FL_IOPL_MASK</span><span class="p">;</span>         <span class="c1">//普通进程不能有IO权限</span>
+    <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_cs</span> <span class="o">=</span> <span class="n">GD_UT</span> <span class="o">|</span> <span class="mi">3</span><span class="p">;</span> <span class="c1">//设置CPL</span>
+    <span class="n">env</span><span class="o">-&gt;</span><span class="n">env_tf</span> <span class="o">=</span> <span class="o">*</span><span class="n">tf</span><span class="p">;</span> <span class="c1">//保存栈帧</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>添加系统调用</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">case</span> <span class="n">SYS_env_set_trapframe</span><span class="p">:</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">sys_env_set_trapframe</span><span class="p">(</span><span class="n">a1</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">Trapframe</span> <span class="o">*</span><span class="p">)</span><span class="n">a2</span><span class="p">);</span>
+    <span class="k">break</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>通过在<code class="language-plaintext highlighter-rouge">kern/init.c</code>中运行<code class="language-plaintext highlighter-rouge">user/spawnhello</code>程序来测试代码，该程序将尝试从文件系统中生成<code class="language-plaintext highlighter-rouge">/hello</code>。</p>
+
+<p>使用<code class="language-plaintext highlighter-rouge">make grade</code>测试代码。</p>
+
+<h2 id="sharing-library-state-across-fork-and-spawn">Sharing library state across fork and spawn</h2>
+
+<p>UNIX文件描述符是一个通用概念，还包含管道，控制台I/O等。在JOS中，这些设备类型中的每一个都有对应的<code class="language-plaintext highlighter-rouge">struct Dev</code>，以及指向实现读/写/等功能的指针。针对该设备类型，<code class="language-plaintext highlighter-rouge">lib/fd.c</code>在此之上实现了通用的类UNIX的文件描述符接口。每个<code class="language-plaintext highlighter-rouge">struct Fd</code>都指示其设备类型，并且<code class="language-plaintext highlighter-rouge">lib/fd.c</code>中的大多数功能只是将操作分派给相应<code class="language-plaintext highlighter-rouge">struct Dev</code>中的功能。</p>
+
+<p><code class="language-plaintext highlighter-rouge">lib/fd.c</code>还在每个应用程序环境的地址空间中维护文件描述符表区域。该区域为应用程序保留一个页面的地址空间（4KB），应用程序可以一次打开的最多<code class="language-plaintext highlighter-rouge">MAXFD</code>（当前为32个）文件描述符。在任何给定时间，当且仅当使用相应的文件描述符时，才会映射特定的文件描述符表页面。每个文件描述符在从<code class="language-plaintext highlighter-rouge">FILEDATA</code>开始的区域中还具有一个可选的<code class="language-plaintext highlighter-rouge">data page</code>，设备可以选择使用它们。</p>
+
+<p>我们希望在<code class="language-plaintext highlighter-rouge">fork</code>和<code class="language-plaintext highlighter-rouge">spawn</code>之间共享文件描述符状态，但是文件描述符状态保留在用户空间内存中。现在，在<code class="language-plaintext highlighter-rouge">fork</code>时，内存将被标记为写时复制，因此状态将被复制而不是共享。（这意味着环境将无法在自身未打开的文件中进行搜索，并且管道将无法在分叉上工作。）在<code class="language-plaintext highlighter-rouge">spawn</code>时，内存将被留下，根本不会被复制。（有效地，<code class="language-plaintext highlighter-rouge">spawn</code>生成的环境开始时没有打开的文件描述符。）</p>
+
+<p>我们将更改<code class="language-plaintext highlighter-rouge">fork</code>以了解某些内存区域已由<code class="language-plaintext highlighter-rouge">library operating system</code>使用，并且应始终共享。与其在某处硬编码区域列表，不如在页表条目中设置一个未使用的位（就像我们对<code class="language-plaintext highlighter-rouge">fork</code>中的<code class="language-plaintext highlighter-rouge">PTE_COW</code>位所做的那样）。</p>
+
+<p>我们在<code class="language-plaintext highlighter-rouge">inc/lib.h</code>中定义了一个新的<code class="language-plaintext highlighter-rouge">PTE_SHARE</code>位。该位是Intel和AMD手册中标记为<code class="language-plaintext highlighter-rouge">available for software use</code>的三个PTE位之一。我们将建立一个约定，如果页表条目设置了该位，则应该在<code class="language-plaintext highlighter-rouge">fork</code>和<code class="language-plaintext highlighter-rouge">spawn</code>中将PTE直接从父级复制到子级。请注意，这与将其标记为<code class="language-plaintext highlighter-rouge">写时复制</code>不同：如第一段所述，我们要确保共享页面更新。</p>
+
+<h3 id="exercise-8">Exercise 8</h3>
+
+<p>在<code class="language-plaintext highlighter-rouge">lib/fork.c</code>中更改<code class="language-plaintext highlighter-rouge">duppage</code>以遵循新约定。如果页表项设置了<code class="language-plaintext highlighter-rouge">PTE_SHARE</code>位，则直接复制映射。（你应该使用<code class="language-plaintext highlighter-rouge">PTE_SYSCALL</code>而不是<code class="language-plaintext highlighter-rouge">0xfff</code>来屏蔽页表项中的相关位。<code class="language-plaintext highlighter-rouge">0xfff</code>也会设置访问的位和脏位。）</p>
+
+<p>duppage修改为如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span>
+<span class="nf">duppage</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">envid</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="n">pn</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">r</span><span class="p">;</span>
+
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="kt">uintptr_t</span><span class="o">*</span> <span class="n">va</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">pn</span> <span class="o">*</span> <span class="n">PGSIZE</span><span class="p">);</span>
+    <span class="n">pte_t</span> <span class="n">pte</span> <span class="o">=</span> <span class="n">uvpt</span><span class="p">[</span><span class="n">PGNUM</span><span class="p">(</span><span class="n">va</span><span class="p">)];</span>
+    <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">pte</span> <span class="o">&amp;</span> <span class="n">PTE_P</span><span class="p">))</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+
+    <span class="k">if</span><span class="p">(</span><span class="n">pte</span> <span class="o">&amp;</span> <span class="n">PTE_SHARE</span><span class="p">)</span> <span class="p">{</span> <span class="c1">//必须放最前面</span>
+        <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_map</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">envid</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">PTE_SYSCALL</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"Page Map Failed: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span><span class="p">((</span><span class="n">pte</span> <span class="o">&amp;</span> <span class="n">PTE_W</span><span class="p">)</span> <span class="o">||</span> <span class="p">(</span><span class="n">pte</span> <span class="o">&amp;</span> <span class="n">PTE_COW</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// 因为envid2env根据envid返回环境，而envid是0时，则返回当前环境，所以使用0代表当前环境</span>
+        <span class="c1">// 将当前环境的va地址所在的页复制到envid环境的地址空间va所在的页</span>
+        <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_map</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">envid</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_COW</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"Page Map Failed: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+        <span class="c1">// 把当前环境的页表权限改变为写时复制</span>
+        <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_map</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_COW</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"Page Map Failed: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span> <span class="c1">// 当va所在的页的没有写权限时，只需要简单复制</span>
+        <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_map</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">envid</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"Page Map Failed: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>同样，在<code class="language-plaintext highlighter-rouge">lib/spawn.c</code>中实现<code class="language-plaintext highlighter-rouge">copy_shared_pa​​ges</code>。它应该遍历当前进程中的所有页表条目（就像<code class="language-plaintext highlighter-rouge">fork</code>一样），将所有已设置<code class="language-plaintext highlighter-rouge">PTE_SHARE</code>位的页映射复制到子进程中。</p>
+
+<p>copy_shared_pages的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Copy the mappings for shared pages into the child address space.</span>
+<span class="k">static</span> <span class="kt">int</span>
+<span class="nf">copy_shared_pages</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">child</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 5: Your code here.</span>
+    <span class="kt">uintptr_t</span> <span class="n">addr</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">addr</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">addr</span> <span class="o">&lt;</span> <span class="n">UTOP</span><span class="p">;</span> <span class="n">addr</span> <span class="o">+=</span> <span class="n">PGSIZE</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">((</span><span class="n">uvpd</span><span class="p">[</span><span class="n">PDX</span><span class="p">(</span><span class="n">addr</span><span class="p">)]</span> <span class="o">&amp;</span> <span class="n">PTE_P</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">uvpt</span><span class="p">[</span><span class="n">PGNUM</span><span class="p">(</span><span class="n">addr</span><span class="p">)]</span> <span class="o">&amp;</span> <span class="n">PTE_P</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+                <span class="p">(</span><span class="n">uvpt</span><span class="p">[</span><span class="n">PGNUM</span><span class="p">(</span><span class="n">addr</span><span class="p">)]</span> <span class="o">&amp;</span> <span class="n">PTE_U</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">uvpt</span><span class="p">[</span><span class="n">PGNUM</span><span class="p">(</span><span class="n">addr</span><span class="p">)]</span> <span class="o">&amp;</span> <span class="n">PTE_SHARE</span><span class="p">))</span> <span class="p">{</span>
+            <span class="n">sys_page_map</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">addr</span><span class="p">,</span> <span class="n">child</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">addr</span><span class="p">,</span> <span class="p">(</span><span class="n">uvpt</span><span class="p">[</span><span class="n">PGNUM</span><span class="p">(</span><span class="n">addr</span><span class="p">)]</span> <span class="o">&amp;</span> <span class="n">PTE_SYSCALL</span><span class="p">));</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>使用<code class="language-plaintext highlighter-rouge">make run-testpteshare-nox</code>检查你的代码是否正常运行。你应该看到这样的行：<code class="language-plaintext highlighter-rouge">fork handles PTE_SHARE right</code>和<code class="language-plaintext highlighter-rouge">spawn handles PTE_SHARE right</code>。</p>
+
+<p>使用<code class="language-plaintext highlighter-rouge">make run-testfdsharing-nox</code>检查文件描述符是否正确共享。您应该看到显示<code class="language-plaintext highlighter-rouge">read in child succeeded</code>和<code class="language-plaintext highlighter-rouge">read in parent succeeded</code>的行。</p>
+
+<h3 id="键盘接口">键盘接口</h3>
+
+<p>为了实现shell，我们需要一种输入方式。 QEMU一直在显示我们写入到CGA显示器和串行端口的数据，但是到目前为止，我们仅在内核监视器中才接受输入。在QEMU中，图形窗口中的显示为从键盘到JOS的输入，而在控制台的显示为串行端口上的字符。从实验1开始，<code class="language-plaintext highlighter-rouge">kern/console.c</code>已经包含了内核监视器使用的键盘和串行驱动程序，但是现在你需要将它们附加到系统的其余部分。</p>
+
+<h4 id="exercise-9">Exercise 9</h4>
+
+<p>在<code class="language-plaintext highlighter-rouge">kern/trap.c</code>中，调用<code class="language-plaintext highlighter-rouge">kbd_intr</code>处理陷阱<code class="language-plaintext highlighter-rouge">IRQ_OFFSET + IRQ_KBD</code>，并调用<code class="language-plaintext highlighter-rouge">serial_intr</code>处理陷阱<code class="language-plaintext highlighter-rouge">IRQ_OFFSET + IRQ_SERIAL</code>。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">// Handle keyboard and serial interrupts.</span>
+    <span class="c1">// LAB 5: Your code here.</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_trapno</span> <span class="o">==</span> <span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="n">IRQ_KBD</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">kbd_intr</span><span class="p">();</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_trapno</span> <span class="o">==</span> <span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="n">IRQ_SERIAL</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">serial_intr</span><span class="p">();</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+</code></pre></div></div>
+
+<p>我们在<code class="language-plaintext highlighter-rouge">lib/console.c</code>中为你实现了控制台输入/输出文件类型。<code class="language-plaintext highlighter-rouge">kbd_intr</code>和<code class="language-plaintext highlighter-rouge">serial_intr</code>用最近读取的输入填充缓冲区，而控制台文件类型消耗缓冲区（默认情况下，除非用户将其重定向，否则控制台文件类型用于<code class="language-plaintext highlighter-rouge">stdin/stdout</code>）。</p>
+
+<p>通过运行<code class="language-plaintext highlighter-rouge">make run-testkbd</code>并键入几行来测试代码。系统会在完成线路后回显你的线路。如果两者都可用，请尝试在控制台和图形窗口中键入。</p>
+
+<h3 id="the-shell">The Shell</h3>
+
+<p>运行<code class="language-plaintext highlighter-rouge">make run-icode</code>或<code class="language-plaintext highlighter-rouge">make run-icode-nox</code>。这将运行内核并启动<code class="language-plaintext highlighter-rouge">user/icode</code>。icode执行init，它将控制台设置为文件描述符0和1（标准输入和标准输出）。然后它将生成sh，shell。应该能够运行以下命令：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="nb">echo </span>hello world | <span class="nb">cat
+    cat </span>lorem |cat
+    <span class="nb">cat </span>lorem |num
+    <span class="nb">cat </span>lorem |num |num |num |num |num
+    lsfd
+</code></pre></div></div>
+
+<p>请注意，用户库例程<code class="language-plaintext highlighter-rouge">cprintf</code>无需使用文件描述符代码即可直接打印到控制台。这对调试很有用，但对管道连接到其他程序却不利。要将输出打印到特定的文件描述符（例如，1，标准输出），请使用<code class="language-plaintext highlighter-rouge">fprintf（1，“ ...”，...）</code>。<code class="language-plaintext highlighter-rouge">printf（“ ...”，...）</code>是打印到FD 1的快捷方式。有关示例，请参见<code class="language-plaintext highlighter-rouge">user/lsfd.c</code>。</p>
+
+<h4 id="exercise-10">Exercise 10</h4>
+
+<p>Shell不支持I/O重定向。最好运行<code class="language-plaintext highlighter-rouge">sh &lt;script</code>而不是像上面一样手动输入脚本中的所有命令。将&lt;的I/O重定向添加到<code class="language-plaintext highlighter-rouge">user/sh.c</code>。</p>
+
+<p><code class="language-plaintext highlighter-rouge">user/sh.c runcmd</code>的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">// LAB 5: Your code here.</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">O_RDONLY</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">cprintf</span><span class="p">(</span><span class="s">"open %s for write: %e"</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">fd</span><span class="p">);</span>
+        <span class="n">exit</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">fd</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">dup</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+        <span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">break</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>通过在shell中键入<code class="language-plaintext highlighter-rouge">sh &lt;script</code>来测试你的实现</p>
+
+<p>运行<code class="language-plaintext highlighter-rouge">make run-testshell</code>来测试shell。<code class="language-plaintext highlighter-rouge">testshell</code>只是将上述命令（也可以在<code class="language-plaintext highlighter-rouge">fs/testshell.sh</code>中找到）输入到Shell中，然后检查输出是否与<code class="language-plaintext highlighter-rouge">fs/testshell.key</code>相匹配。</p>
+
+<p>最后一个测试通不过的可以改一下测试脚本的超时时间，哭了</p>
+:ET

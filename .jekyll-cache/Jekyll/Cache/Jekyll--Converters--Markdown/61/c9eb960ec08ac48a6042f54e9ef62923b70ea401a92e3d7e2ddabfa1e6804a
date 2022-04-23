@@ -1,0 +1,138 @@
+I"><h2 id="jsp">JSP</h2>
+
+<p>注意: 使用jsp时,需要导入<code class="language-plaintext highlighter-rouge">servlet-api.jar</code>包.使用EL表达式时,需要导入<code class="language-plaintext highlighter-rouge">jsp-api.jar</code>包</p>
+
+<h3 id="jsp指令">JSP指令</h3>
+
+<p>page: <code class="language-plaintext highlighter-rouge">&lt;%@ page contentType="text/html;charset=utf8" %&gt;</code></p>
+
+<p>include: <code class="language-plaintext highlighter-rouge">&lt;%@include file="sourcePath"%&gt;</code></p>
+
+<p>taglib: <code class="language-plaintext highlighter-rouge">&lt;%@ taglib prefix="c" uri=http://java.sun.com/jsp/jstl/core %&gt;</code></p>
+
+<h3 id="jsp注释">JSP注释</h3>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;</span><span class="err">%</span><span class="na">--</span>
+
+<span class="na">--</span><span class="err">%</span><span class="nt">&gt;</span>
+</code></pre></div></div>
+
+<h3 id="jsp内置对象">JSP内置对象</h3>
+
+<p>JSP内置对象和servlet对像的关系:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code> jsp内置对象                servlet
+
+pageContext             PageContext
+request                 HttpServletRequest/ServletRequest
+session                 HttpSession
+application             ServletContext
+response                HttpServletRespons/ServletResponse
+out                     JspWriter
+page                    this
+config                  ServletConfig
+exception               Throwable
+</code></pre></div></div>
+
+<h2 id="servlet">Servlet</h2>
+
+<p>Servlet创建时间</p>
+
+<p>在<code class="language-plaintext highlighter-rouge">&lt;servlet&gt;</code>标签下</p>
+
+<p><code class="language-plaintext highlighter-rouge">&lt;load-on-startup&gt;&lt;\load-on-startup&gt;</code></p>
+
+<p>当中间的值为正整数或0时,是服务器启动是创建.当中间的值为负数时,是第一次访问时创建</p>
+
+<h2 id="el表达式">EL表达式</h2>
+
+<p>语法: <code class="language-plaintext highlighter-rouge">${expression}</code></p>
+
+<p>忽略EL表达式</p>
+
+<p><code class="language-plaintext highlighter-rouge">isELIgnored="true"</code> 可以忽略所有EL表达式</p>
+
+<p>在语法前面加<code class="language-plaintext highlighter-rouge">\</code>可以忽略单个EL表达式</p>
+
+<p>注意: EL表达式只能从域对象中获取值</p>
+
+<h3 id="empty运算符">empty运算符</h3>
+
+<p><code class="language-plaintext highlighter-rouge">${empty 名}</code></p>
+
+<h3 id="域对象">域对象</h3>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pageScope              pageContext
+requestScope           request
+sessionScope           session
+applicationScope       application(ServletContext)
+</code></pre></div></div>
+
+<p>如果采用<code class="language-plaintext highlighter-rouge">${name}</code>语法,其中忽略键名,EL会从最小的域开始寻找值.分别是pageScope,requestScope,sessionScope,applicationScope</p>
+
+<h3 id="获取对象的属性调用对象中的getter方法">获取对象的属性(调用对象中的getter方法)</h3>
+
+<p><code class="language-plaintext highlighter-rouge">${域名.对象.方法名去掉get并且首字母小写}</code></p>
+
+<h3 id="获取list的值">获取list的值</h3>
+
+<p><code class="language-plaintext highlighter-rouge">${域名.键名[索引]}</code></p>
+
+<h3 id="获取map的值">获取map的值</h3>
+
+<p><code class="language-plaintext highlighter-rouge">${域名.键名.key名}</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">${域名.键名[key名]}</code></p>
+
+<h3 id="隐式对象">隐式对象</h3>
+
+<p>pageContext</p>
+
+<h2 id="jstl标签">JSTL标签</h2>
+
+<p><code class="language-plaintext highlighter-rouge">&lt;%@ taglib prefix="c" uri=http://java.sun.com/jsp/jstl/core %&gt;</code></p>
+
+<h3 id="if">if</h3>
+
+<p>必需的属性test,接收boolean表达式,值为true才会显示,没有else语句</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&lt;</span><span class="nl">c:</span><span class="k">if</span> <span class="n">test</span><span class="o">=</span><span class="s">"true"</span><span class="o">&gt;</span>
+<span class="n">我是真</span>
+<span class="o">&lt;/</span><span class="nl">c:</span><span class="k">if</span><span class="o">&gt;</span>
+</code></pre></div></div>
+
+<h3 id="choose">choose</h3>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&lt;</span><span class="nl">c:</span><span class="n">choose</span><span class="o">&gt;</span>
+    <span class="o">&lt;</span><span class="nl">c:</span><span class="n">when</span> <span class="n">test</span><span class="o">=</span><span class="s">""</span><span class="o">&gt;&lt;/</span><span class="nl">c:</span><span class="n">when</span><span class="o">&gt;</span>
+    <span class="o">&lt;</span><span class="nl">c:</span><span class="n">when</span> <span class="n">test</span><span class="o">=</span><span class="s">""</span><span class="o">&gt;&lt;/</span><span class="nl">c:</span><span class="n">when</span><span class="o">&gt;</span>
+    <span class="o">&lt;</span><span class="nl">c:</span><span class="n">otherwise</span><span class="o">&gt;&lt;/</span><span class="nl">c:</span><span class="n">otherwise</span><span class="o">&gt;</span>
+<span class="o">&lt;/</span><span class="nl">c:</span><span class="n">choose</span><span class="o">&gt;</span>
+</code></pre></div></div>
+
+<h3 id="foreach">forEach</h3>
+
+<p>普通for循环:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&lt;</span><span class="nl">c:</span><span class="n">forEach</span> <span class="n">begin</span><span class="o">=</span><span class="s">"1"</span> <span class="n">end</span><span class="o">=</span><span class="s">"10"</span> <span class="kt">var</span><span class="o">=</span><span class="s">"i"</span> <span class="n">step</span><span class="o">=</span><span class="s">"1"</span><span class="o">&gt;</span>
+<span class="err">$</span><span class="o">{</span><span class="n">i</span><span class="o">}&lt;</span><span class="n">br</span><span class="o">&gt;</span>
+<span class="o">&lt;/</span><span class="nl">c:</span><span class="n">forEach</span><span class="o">&gt;</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">varStatus</code>的<code class="language-plaintext highlighter-rouge">index</code>,<code class="language-plaintext highlighter-rouge">count</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">index</code>是容器元素的索引,从0开始</p>
+
+<p><code class="language-plaintext highlighter-rouge">count</code>代表循环次数,从1开始</p>
+
+<p>遍历容器:</p>
+
+<p>items: 容器对象</p>
+
+<p>var: 容器元素的临时变量</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">&lt;</span><span class="nl">c:</span><span class="n">forEach</span> <span class="n">items</span><span class="o">=</span><span class="s">"${list}"</span> <span class="kt">var</span><span class="o">=</span><span class="s">"str"</span> <span class="n">varStatus</span><span class="o">=</span><span class="s">"s"</span><span class="o">&gt;</span>
+<span class="err">$</span><span class="o">{</span><span class="n">s</span><span class="o">.</span><span class="na">index</span><span class="o">}</span> <span class="err">$</span><span class="o">{</span><span class="n">s</span><span class="o">.</span><span class="na">count</span><span class="o">}</span> <span class="err">$</span><span class="o">{</span><span class="n">str</span><span class="o">}</span>
+<span class="o">&lt;/</span><span class="nl">c:</span><span class="n">forEach</span><span class="o">&gt;</span>
+</code></pre></div></div>
+:ET

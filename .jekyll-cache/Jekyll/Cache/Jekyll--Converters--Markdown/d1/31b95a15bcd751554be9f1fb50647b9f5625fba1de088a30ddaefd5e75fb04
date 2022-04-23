@@ -1,0 +1,487 @@
+I"k�<blockquote>
+  <p>本文为原创</p>
+</blockquote>
+
+<p><a href="https://zhuanlan.zhihu.com/p/49935908">实验中文翻译</a></p>
+
+<h2 id="pc物理地址空间">PC物理地址空间</h2>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    +------------------+  &lt;- 0xFFFFFFFF (4GB)
+    |      32-bit      |
+    |  memory mapped   |
+    |     devices      |
+    |                  |
+    /\/\/\/\/\/\/\/\/\/\
+
+    /\/\/\/\/\/\/\/\/\/\
+    |                  |
+    |      Unused      |
+    |                  |
+    +------------------+  &lt;- depends on amount of RAM
+    |                  |
+    |                  |
+    | Extended Memory  |
+    |                  |
+    |                  |
+    +------------------+  &lt;- 0x00100000 (1MB)
+    |     BIOS ROM     |
+    +------------------+  &lt;- 0x000F0000 (960KB)
+    |  16-bit devices, |
+    |  expansion ROMs  |
+    +------------------+  &lt;- 0x000C0000 (768KB)
+    |   VGA Display    |
+    +------------------+  &lt;- 0x000A0000 (640KB)
+    |                  |
+    |    Low Memory    |
+    |                  |
+    +------------------+  &lt;- 0x00000000
+</code></pre></div></div>
+
+<p>第一代基于16位Intel 8088处理器的PC仅能够使用1MB的物理内存。因此，早期PC的物理地址空间将从0x00000000开始，到0x000FFFFF结束，而不是0xFFFFFFFF。标有“Low Memory”的640KB区域是早期PC可以使用的唯一的随机存取存储器（RAM）; 事实上，最早的PC只能配置16KB，32KB或64KB的RAM！</p>
+
+<p>从0x000A0000到0x000FFFFF的384KB区域由硬件保留用于特殊用途，例如视频显示缓冲区和固件的非易失性存储。这些保留区域最重要的部分是BIOS，它占用了从0x000F0000到0x000FFFFF的64KB区域。早期的PC把BIOS保存在真正的只读存储器（ROM）中，但是现在的PC将BIOS存储在可更新的闪存中。BIOS负责执行基本的系统初始化，例如激活显卡和检查安装的内存容量。执行此初始化后，BIOS从某些适当的位置（如软盘，硬盘，CD-ROM或网络）加载操作系统，并将机器的控制权交给操作系统。</p>
+
+<p>Intel的80286和80386处理器突破了1Mb的内存大小，并且它们分别支持16MB和4GB物理地址空间的，但是仍然保留了原有的低1MB物理地址空间布局，以确保向后兼容软件。因此，现代PC在物理内存中有一个“空洞”，从0x000A0000到0x00100000，它将RAM分为两个部分，一个是“Low”或着叫作“conventional memory”，这一块就是内存起始的前640KB，另一个是“extended memory”（其他所有剩余容量）。此外，PC的32位物理地址空间顶部的一些空间，通常由BIOS保留，供32位PCI设备使用。</p>
+
+<h2 id="实模式">实模式</h2>
+
+<p>在实模式下，内存被限制为仅一兆字节（220字节）。 有效地址范围是（十六进制）00000至FFFFF。 这些地址需要一个20位数字。 显然，8086的任何16位寄存器都无法容纳20位数字。 英特尔通过使用两个16位值确定一个地址来解决此问题。 第一个16位值称为selector。selector的值必须存储在段寄存器中。 第二个16位值称为offset。 由一对32位的<code class="language-plaintext highlighter-rouge">selector：offset</code>来引用的物理地址，物理地址由以下公式计算</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>16 ∗ selector + offset
+</code></pre></div></div>
+
+<p>用十六进制乘以16很容易，只需在数字的右边添加一个0。例如，由047C：0048引用的物理地址由下式给出：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>  047C0
+  +0048
+————————
+  04808
+</code></pre></div></div>
+
+<p>实际上，selector的值是一个段落号</p>
+
+<p>这个分段地址有以下缺点：</p>
+
+<ul>
+  <li>
+    <p>一个selector的值只能引用64K内存（16位偏移的限制）。 如果程序有64K以上的代码？ CS寄存器中的值就不能用于该程序的整个执行。 该程序必须分为几个部分（称为段），每个部分的大小小于64K。 当执行从一个段移到另一个段时，必须更改CS的值。 类似问题
+在有大量数据和DS寄存器中发生。</p>
+  </li>
+  <li>
+    <p>内存中的每个字节没有唯一的分段地址。物理地址04808可以由047C：0048、047D：0038、047E：0028或047B：0058引用。 这会使分段地址的比较变复杂。</p>
+  </li>
+</ul>
+
+<h2 id="16位保护模式">16位保护模式</h2>
+
+<p>在80286的16位保护模式下，selector的值的解释与实模式完全不同。在实模式下，selector的值是物理内存的段落编号。 在保护模式下，selector的值是描述符表的索引。在两种模式下，程序都是被分为几个部分。在实模式下，这些段位于物理内存中的固定位置
+，selector的值表示该段的开头的段落编号。在保护模式下，段不是在物理内存中的固定位置。实际上，段不一定在内存中！</p>
+
+<p>保护模式使用一种虚拟内存的技术。基本思路虚拟内存系统的功能是仅将正在运行的程序的数据和代码保留在内存中，而其他数据和代码被临时存储在磁盘上，直到再次运行它们为止。</p>
+
+<p>在16位保护模式下，段会根据需要在内存和磁盘之间移动。段从磁盘存储返回到内存时，很有可能会将其放置在其他区域。所有这些都由操作系统完成。</p>
+
+<p>在保护模式下，在描述符表中为每个段分配了一个条目。这个条目具有系统需要知道的段的所有信息。该信息包括：当前是否在内存中；
+如果在内存中，它在哪里；访问权限（例如，只读）。 selector的值就是用于在描述符表中寻找条目的索引值。</p>
+
+<p>16位保护模式的一大缺点是偏移量仍为16位。 结果，段大小仍然限制为最大64K。 这使得使用大型阵列成为问题！</p>
+
+<h2 id="32位保护模式">32位保护模式</h2>
+
+<p>80386引入了32位保护模式。386 32位和286 16位保护模式之间有两个主要区别：</p>
+
+<ol>
+  <li>
+    <p>偏移量扩展为32位。这允许偏移范围扩大到40亿。 因此，段的最大大小为4 GB。</p>
+  </li>
+  <li>
+    <p>段可以被分成大小为4K的页。虚拟内存系统现在可以处理页面而不是段。
+这意味着，在任何时间里，一个段可能只有一部分在内存中。在286的16位模式下，整个段都在内存中或都不在。对于32位的较大段，这是不切实际的。</p>
+  </li>
+</ol>
+
+<h2 id="boot-loader">Boot Loader</h2>
+
+<p>BIOS将启动扇区加载到物理地址0x7c00至0x7dff这个区间。在6.828中,boot loader 主要完成两个工作，一个是将实模式转换到保护模式，一个是加载jos内核。</p>
+
+<ol>
+  <li>
+    <p>将寄存器 cr0 的第一位为1置为1,即可开启保护模式,主要代码如下:</p>
+
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="p">.</span><span class="n">set</span> <span class="n">CR0_PE_ON</span><span class="p">,</span>      <span class="mh">0x1</span>         <span class="err">#</span> <span class="n">protected</span> <span class="n">mode</span> <span class="n">enable</span> <span class="n">flag</span>
+</code></pre></div>    </div>
+
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="n">lgdt</span>    <span class="n">gdtdesc</span>
+ <span class="n">movl</span>    <span class="o">%</span><span class="n">cr0</span><span class="p">,</span> <span class="o">%</span><span class="n">eax</span>
+ <span class="n">orl</span>     <span class="err">$</span><span class="n">CR0_PE_ON</span><span class="p">,</span> <span class="o">%</span><span class="n">eax</span>
+ <span class="n">movl</span>    <span class="o">%</span><span class="n">eax</span><span class="p">,</span> <span class="o">%</span><span class="n">cr0</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>加载内核的第一步是,将 kernel 加载到一个page中,这个page是4k的大小,而且有一个elf格式的结构体指针(ELFHDR)指向这个page的首地址.</p>
+
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="cp">#define ELFHDR    ((struct Elf *) 0x10000) // scratch space
+</span></code></pre></div>    </div>
+
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c1">// read 1st page off disk (4k)</span>
+ <span class="n">readseg</span><span class="p">((</span><span class="kt">uint32_t</span><span class="p">)</span> <span class="n">ELFHDR</span><span class="p">,</span> <span class="n">SECTSIZE</span><span class="o">*</span><span class="mi">8</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</code></pre></div>    </div>
+  </li>
+</ol>
+
+<p>然后根据魔数判断kernel的elf格式是否正确.接下来将根据ELFHDR指针的<code class="language-plaintext highlighter-rouge">e_phoff</code>找到program header table的首地址,然后根据table中的条目加载相应的程序.</p>
+
+<p>主要代码如下:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// load each program segment (ignores ph flags),e_phoff(program header table offset)</span>
+<span class="n">ph</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">Proghdr</span> <span class="o">*</span><span class="p">)</span> <span class="p">((</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="p">)</span> <span class="n">ELFHDR</span> <span class="o">+</span> <span class="n">ELFHDR</span><span class="o">-&gt;</span><span class="n">e_phoff</span><span class="p">);</span>
+<span class="n">eph</span> <span class="o">=</span> <span class="n">ph</span> <span class="o">+</span> <span class="n">ELFHDR</span><span class="o">-&gt;</span><span class="n">e_phnum</span><span class="p">;</span>
+<span class="k">for</span> <span class="p">(;</span> <span class="n">ph</span> <span class="o">&lt;</span> <span class="n">eph</span><span class="p">;</span> <span class="n">ph</span><span class="o">++</span><span class="p">)</span>
+    <span class="c1">// p_pa is the load address of this segment (as well</span>
+    <span class="c1">// as the physical address)</span>
+    <span class="n">readseg</span><span class="p">(</span><span class="n">ph</span><span class="o">-&gt;</span><span class="n">p_pa</span><span class="p">,</span> <span class="n">ph</span><span class="o">-&gt;</span><span class="n">p_memsz</span><span class="p">,</span> <span class="n">ph</span><span class="o">-&gt;</span><span class="n">p_offset</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h2 id="exercise-3">Exercise 3</h2>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>1. At what point does the processor start executing 32-bit code? What exactly causes the switch from 16- to 32-bit mode?
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<p>在执行完<code class="language-plaintext highlighter-rouge">movl %eax, %cr0</code>之后,保护模式被开启,32-bit的code就可以执行了,cr0寄存器的第一位置为1,就是开启了保护模式.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2. What is the last instruction of the boot loader executed, and what is the first instruction of the kernel it just loaded?
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<p><code class="language-plaintext highlighter-rouge">call *0x10018</code>是boot loader执行的最后的代码。可以通过查看boot loader反编译的<code class="language-plaintext highlighter-rouge">boot.asm</code>得到.</p>
+
+<p><code class="language-plaintext highlighter-rouge">movw $0x1234,0x472</code>是内核执行的第一行代码。</p>
+
+<p>分析：</p>
+
+<p><code class="language-plaintext highlighter-rouge">objdump -x obj/kern/kernel</code></p>
+
+<p>反汇编内核代码，可以直接查看内核的第一行代码的位置，然后在<code class="language-plaintext highlighter-rouge">0x10000c</code>处设置断点，运行到此处即可得到内核的第一行代码</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>3. Where is the first instruction of the kernel?
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<p>内核的第一条指令的物理地址为0x10000c</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>4. How does the boot loader decide how many sectors it must read in order to fetch the entire kernel from disk? Where does it find this information?
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<p>elf header 中有提供内核大小</p>
+
+<h2 id="exercise-5">Exercise 5</h2>
+
+<p>解答:</p>
+
+<p>将Makefrag文件中的-Ttext的参数修改为0x7c01，然后再调试，会发现qemu在反复读取内核。其实内核加载会成功，但是在替换程序的符合引用时，会出错。</p>
+
+<h2 id="exercise-7">Exercise 7</h2>
+
+<p>解答:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># Load the physical address of entry_pgdir into cr3.  entry_pgdir
+# is defined in entrypgdir.c.这是一个有局限的页目录,只能映射[KERNBASE, KERNBASE+4MB)
+# 页目录的物理地址被存放在cr3中,cr0的PE,PG,WP位置1,分别代表开启保护,开启分页,开启写保护
+movl    $(RELOC(entry_pgdir)), %eax
+movl    %eax, %cr3
+# Turn on paging.
+movl    %cr0, %eax
+orl     $(CR0_PE|CR0_PG|CR0_WP), %eax
+movl    %eax, %cr0
+</code></pre></div></div>
+
+<p>因为<code class="language-plaintext highlighter-rouge">movl %eax,%cr0</code>会开启页表，所以在没有执行这条指令的时候，0xf0100000处是没有内容的，而0x00100000处有内容。当执行这条指令后，页表开启，虚拟高地址将映射到物理低地址，所以0xf0100000和0x00100000处的内容相同，因为，虚拟低地址同样会映射到物理低地址。</p>
+
+<p>如果注释掉，结果很明显。由于没有开启分页，导致后面的跳转指令出错。</p>
+
+<h2 id="exercise-8">Exercise 8</h2>
+
+<p>实验开始前,先来一波分析.</p>
+
+<p>I/O分析:
+<code class="language-plaintext highlighter-rouge">int cprintf(const char *fmt, ...);</code>这是<code class="language-plaintext highlighter-rouge">inc/stdio.h</code>中定义的输出函数,函数cprintf在<code class="language-plaintext highlighter-rouge">kern/print.c</code>中实现,代码如下:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span>
+<span class="nf">cprintf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">fmt</span><span class="p">,</span> <span class="p">...)</span>
+<span class="p">{</span>
+    <span class="kt">va_list</span> <span class="n">ap</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">cnt</span><span class="p">;</span>
+
+    <span class="n">va_start</span><span class="p">(</span><span class="n">ap</span><span class="p">,</span> <span class="n">fmt</span><span class="p">);</span>
+    <span class="n">cnt</span> <span class="o">=</span> <span class="n">vcprintf</span><span class="p">(</span><span class="n">fmt</span><span class="p">,</span> <span class="n">ap</span><span class="p">);</span>
+    <span class="n">va_end</span><span class="p">(</span><span class="n">ap</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="n">cnt</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>这段代码中会调用三个函数<code class="language-plaintext highlighter-rouge">va_start</code>,<code class="language-plaintext highlighter-rouge">vcprintf</code>和<code class="language-plaintext highlighter-rouge">va_end</code>,其中<code class="language-plaintext highlighter-rouge">va_start</code>和<code class="language-plaintext highlighter-rouge">va_end</code>是在<code class="language-plaintext highlighter-rouge">inc/stdarg.h</code>在定义的,具体可以参考<a href="https://www.cnblogs.com/pengdonglin137/p/3345911.html">这里</a>.vcprintf函数是在<code class="language-plaintext highlighter-rouge">kern/print.c</code>中实现的,vcprintf代码实现如下:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>int
+vcprintf(const char *fmt, va_list ap)
+{
+    int cnt = 0;
+
+    vprintfmt((void*)putch, &amp;cnt, fmt, ap);
+    return cnt;
+}
+</code></pre></div></div>
+
+<p>很明显,cnt是用来计量实际输出字符的,然后调用<code class="language-plaintext highlighter-rouge">lib/printfmt.c</code>中定义的vprintfmt函数来实现输出数据格式化,然后在vprintfmt函数内部调用<code class="language-plaintext highlighter-rouge">printnum</code>函数,<code class="language-plaintext highlighter-rouge">printnum</code>函数又调用<code class="language-plaintext highlighter-rouge">putch</code>函数,然后<code class="language-plaintext highlighter-rouge">putch</code>函数经过一系列复杂的过程将数据输出.屏幕打印可以查看王爽的《汇编语言》,向内存地址0xb8000输入即可打印至屏幕。</p>
+
+<p>实验开始:</p>
+
+<p>代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">case</span> <span class="sc">'o'</span><span class="p">:</span>
+    <span class="c1">// Replace this with your code.</span>
+    <span class="n">num</span> <span class="o">=</span> <span class="n">getuint</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ap</span><span class="p">,</span> <span class="n">lflag</span><span class="p">);</span>
+    <span class="n">base</span> <span class="o">=</span> <span class="mi">8</span><span class="p">;</span>
+    <span class="k">goto</span> <span class="n">number</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>Be able to answer the following questions:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>1. Explain the interface between printf.c and console.c. Specifically, what function does console.c export? How is this function used by printf.c?
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<ul>
+  <li>
+    <p>cputchar，打印一个单一的字符</p>
+  </li>
+  <li>
+    <p>在printf.c中，由于printf中的args是不确定的，因此我们需要使用va_list和格式字符串来确定参数数量。cprintf（）将调用vcprintf（），后者将调用vprintfmt，vprintfmt()将解析格式字符串并读入（使用va_list）参数，并将其输出到屏幕（使用console.c给出的cputchar）。</p>
+  </li>
+</ul>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="mi">2</span><span class="p">.</span><span class="err">　</span><span class="n">Explain</span> <span class="n">the</span> <span class="n">following</span> <span class="n">from</span> <span class="n">console</span><span class="p">.</span><span class="n">c</span><span class="o">:</span>
+<span class="mi">1</span>      <span class="nf">if</span> <span class="p">(</span><span class="n">crt_pos</span> <span class="o">&gt;=</span> <span class="n">CRT_SIZE</span><span class="p">)</span> <span class="p">{</span>
+<span class="mi">2</span>          <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+<span class="mi">3</span>          <span class="n">memmove</span><span class="p">(</span><span class="n">crt_buf</span><span class="p">,</span> <span class="n">crt_buf</span> <span class="o">+</span> <span class="n">CRT_COLS</span><span class="p">,</span> <span class="p">(</span><span class="n">CRT_SIZE</span> <span class="o">-</span> <span class="n">CRT_COLS</span><span class="p">)</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">uint16_t</span><span class="p">));</span>
+<span class="mi">4</span>          <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="n">CRT_SIZE</span> <span class="o">-</span> <span class="n">CRT_COLS</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">CRT_SIZE</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+<span class="mi">5</span>              <span class="n">crt_buf</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mh">0x0700</span> <span class="o">|</span> <span class="sc">' '</span><span class="p">;</span>
+<span class="mi">6</span>          <span class="n">crt_pos</span> <span class="o">-=</span> <span class="n">CRT_COLS</span><span class="p">;</span>
+<span class="mi">7</span>      <span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="p">(</span><span class="n">crt_pos</span> <span class="o">&gt;=</span> <span class="n">CRT_SIZE</span><span class="p">)</span> <span class="p">{</span><span class="c1">//判断屏幕是否已经打印满了，需要向上滚动一行</span>
+    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+
+    <span class="n">memmove</span><span class="p">(</span><span class="n">crt_buf</span><span class="p">,</span> <span class="n">crt_buf</span> <span class="o">+</span> <span class="n">CRT_COLS</span><span class="p">,</span> <span class="p">(</span><span class="n">CRT_SIZE</span> <span class="o">-</span> <span class="n">CRT_COLS</span><span class="p">)</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">uint16_t</span><span class="p">));</span>   <span class="c1">//每行向上滚动</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="n">CRT_SIZE</span> <span class="o">-</span> <span class="n">CRT_COLS</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">CRT_SIZE</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="c1">//最后一行打印空格，等于清除一行</span>
+        <span class="n">crt_buf</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mh">0x0700</span> <span class="o">|</span> <span class="sc">' '</span><span class="p">;</span>
+    <span class="n">crt_pos</span> <span class="o">-=</span> <span class="n">CRT_COLS</span><span class="p">;</span><span class="c1">//光标移至最后一行的第一列</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>3. For the following questions you might wish to consult the notes for Lecture 2. These notes cover GCC's calling convention on the x86.
+Trace the execution of the following code step-by-step:
+
+int x = 1, y = 3, z = 4;
+cprintf("x %d, y %x, z %d\n", x, y, z);
+
+In the call to cprintf(), to what does fmt point? To what does ap point?
+
+List (in order of execution) each call to cons_putc, va_arg, and vcprintf. For cons_putc, list its argument as well. For va_arg, list what ap points to before and after the call. For vcprintf list the values of its two arguments.
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<p>fmt指向格式化字符串”x %d, y %x, z %d\n”，ap指向第一个要打印的参数的内存地址，也就是x的地址。</p>
+
+<p>这个可以通过直接阅读源码得出结果,也可以参考<a href="https://jiyou.github.io/blog/2018/04/15/mit.6.828/jos-lab1/">这里</a></p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>4. Run the following code.
+    unsigned int i = 0x00646c72;
+    cprintf("H%x Wo%s", 57616, &amp;i);
+What is the output? Explain how this output is arrived at in the step-by-step manner of the previous exercise. Here's an ASCII table that maps bytes to characters.
+The output depends on that fact that the x86 is little-endian. If the x86 were instead big-endian what would you set i to in order to yield the same output? Would you need to change 57616 to a different value?
+
+Here's a description of little- and big-endian and a more whimsical description.
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<p>输出为hello world.这个可以直接加入内核打印,也可以参考<a href="https://www.cnblogs.com/wuhualong/p/lab01_exercise08_formatted_printing_to_the_console.html">这里</a></p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>5. In the following code, what is going to be printed after 'y='? (note: the answer is not a specific value.) Why does this happen?
+    cprintf("x=%d y=%d", 3);
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<p>这种栈越界操作，其实是无法判定的。因为不知道越界这个内存里面以前放的内容是什么。</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>6. Let's say that GCC changed its calling convention so that it pushed arguments on the stack in declaration order, so that the last argument is pushed last. How would you have to change cprintf or its interface so that it would still be possible to pass it a variable number of arguments?
+</code></pre></div></div>
+
+<p>这个可以通过直接阅读源码得出结果,也可以参考<a href="https://www.cnblogs.com/wuhualong/p/lab01_exercise08_formatted_printing_to_the_console.html">这里</a>,他提供了两种方法,第一种我不是很明白.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Challenge Enhance the console to allow text to be printed in different colors. The traditional way to do this is to make it interpret ANSI escape sequences embedded in the text strings printed to the console, but you may use any mechanism you like. There is plenty of information on the 6.828 reference page and elsewhere on the web on programming the VGA display hardware. If you're feeling really adventurous, you could try switching the VGA hardware into a graphics mode and making the console draw text onto the graphical frame buffer.
+</code></pre></div></div>
+
+<table>
+  <tbody>
+    <tr>
+      <td>时隔半年终于会了，在王爽的汇编语言中，大部分实验都是与屏幕打印相关，一个字符在汇编层中占两个字节，高位与颜色相关，低位是字符。我在console.c中的cga_putc(int c)函数中执行了一条’c</td>
+      <td>0x2000’语句,打印出绿色背景白色的字体了:</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nl">default:</span>
+    <span class="n">crt_buf</span><span class="p">[</span><span class="n">crt_pos</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="n">c</span> <span class="o">|</span> <span class="mh">0x2000</span><span class="p">;</span>    <span class="cm">/* write the character */</span>
+    <span class="k">break</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h2 id="exercise-9">Exercise 9</h2>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Exercise 9. Determine where the kernel initializes its stack, and exactly where in memory its stack is located. How does the kernel reserve space for its stack? And at which "end" of this reserved area is the stack pointer initialized to point to?
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp"># Set the stack pointer
+</span><span class="n">movl</span>     <span class="err">$</span><span class="p">(</span><span class="n">bootstacktop</span><span class="p">),</span><span class="o">%</span><span class="n">esp</span>
+<span class="n">f0100034</span><span class="o">:</span>    <span class="n">bc</span> <span class="mo">00</span> <span class="mo">00</span> <span class="mi">11</span> <span class="n">f0</span>      <span class="n">mov</span>    <span class="err">$</span><span class="mh">0xf0110000</span><span class="p">,</span><span class="o">%</span><span class="n">esp</span>
+</code></pre></div></div>
+
+<h2 id="exercise-10">Exercise 10</h2>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Exercise 10. To become familiar with the C calling conventions on the x86, find the address of the test_backtrace function in obj/kern/kernel.asm, set a breakpoint there, and examine what happens each time it gets called after the kernel starts. How many 32-bit words does each recursive nesting level of test_backtrace push on the stack, and what are those words?
+
+Note that, for this exercise to work properly, you should be using the patched version of QEMU available on the tools page or on Athena. Otherwise, you'll have to manually translate all breakpoint and memory addresses to linear addresses.
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<p>gdb调试可以参考<a href="https://wizardforcel.gitbooks.io/100-gdb-tips/print-registers.html">这里</a>.实验可以参考<a href="https://www.cnblogs.com/wuhualong/p/lab01_exercise10_test_backtrace.html">这里</a>.</p>
+
+<p>通过kernel.asm可以找到,每次会把eip,ebp,ebx,esi压入栈中,它们都是32bit的.%esp存储栈顶的位置，%ebp存储调用者栈顶的位置，%eax存储x的值,%eip存放下一条指令的内存地址,eip的值是call指令执行时压栈的.</p>
+
+<h2 id="exercise-11">Exercise 11</h2>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Exercise 11. Implement the backtrace function as specified above. Use the same format as in the example, since otherwise the grading script will be confused. When you think you have it working right, run make grade to see if its output conforms to what our grading script expects, and fix it if it doesn't. After you have handed in your Lab 1 code, you are welcome to change the output format of the backtrace function any way you like.
+
+If you use read_ebp(), note that GCC may generate "optimized" code that calls read_ebp() before mon_backtrace()'s function prologue, which results in an incomplete stack trace (the stack frame of the most recent function call is missing). While we have tried to disable optimizations that cause this reordering, you may want to examine the assembly of mon_backtrace() and make sure the call to read_ebp() is happening after the function prologue.
+</code></pre></div></div>
+
+<p>解答:</p>
+
+<p>每个test_backtrace函数的调用会创建一个相同的栈.</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>args[4]
+args[3]
+args[2]
+args[1]
+args[0]
+eip
+ebp
+</code></pre></div></div>
+
+<p>所以可以根据这个写这样的代码.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span>
+<span class="nf">mon_backtrace</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">,</span> <span class="k">struct</span> <span class="n">Trapframe</span> <span class="o">*</span><span class="n">tf</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">ebp</span> <span class="o">=</span> <span class="n">read_ebp</span><span class="p">();</span>
+    <span class="kt">uint32_t</span> <span class="n">eip</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="cp">#define TO_INT(x)  *((uint32_t*)(x))
+</span>    <span class="k">while</span> <span class="p">(</span><span class="n">ebp</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">eip</span> <span class="o">=</span> <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">4</span><span class="p">));</span>
+        <span class="n">cprintf</span><span class="p">(</span><span class="s">"ebp %08x  eip %08x  args %08x %08x %08x %08x %08x</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+                <span class="n">ebp</span><span class="p">,</span>                <span class="cm">/*ebp*/</span>
+                <span class="n">eip</span><span class="p">,</span>                <span class="cm">/*eip*/</span>
+                <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">8</span><span class="p">)),</span>    <span class="cm">/*arg1*/</span>
+                <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">12</span><span class="p">)),</span>   <span class="cm">/*arg2*/</span>
+                <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">16</span><span class="p">)),</span>   <span class="cm">/*arg3*/</span>
+                <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">20</span><span class="p">)),</span>   <span class="cm">/*arg4*/</span>
+                <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">24</span><span class="p">)));</span>  <span class="cm">/*arg5*/</span>
+
+        <span class="n">ebp</span> <span class="o">=</span> <span class="n">TO_INT</span><span class="p">(</span><span class="n">ebp</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="exercise-12">Exercise 12</h2>
+
+<p>解答:</p>
+
+<p>是否有加载符号表,可以在内核进入点0x10000c处设置断点.然后使用命令<code class="language-plaintext highlighter-rouge">x/8s stabstr_begin</code>可以查看,stab_begin是你的stabstr段的开始地址,stabstr段的开始地址可以使用命令<code class="language-plaintext highlighter-rouge">objdump -h obj/kern/kernel</code>查看,stabstr段的VMA的值就是开始地址,我的操作如下:</p>
+
+<p><img src="/assets/images/posts/2019-06-17-6.828 lec1/06.png" alt="" /></p>
+
+<p>从图中可以看出已经加载了符号表.通过<code class="language-plaintext highlighter-rouge">objdump -G obj/kern/kernel</code>可以查到下面这种信息：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Symnum n_type n_othr n_desc n_value  n_strx String
+118    FUN    0      0      f01000a6 2987   i386_init:F<span class="o">(</span>0,25<span class="o">)</span>
+119    SLINE  0      24     00000000 0
+120    SLINE  0      34     00000012 0
+121    SLINE  0      36     00000017 0
+122    SLINE  0      39     0000002b 0
+123    SLINE  0      43     0000003a 0  
+</code></pre></div></div>
+
+<p>stab的解释可以查看<a href="https://www.cnblogs.com/wuhualong/p/lab01_exercise12_print_more_info.html">这里</a></p>
+
+<p>在stab table和stabstr table中，保存有对应虚拟地址在那个文件中，那个函数，那一行，已经汇编格式的offset。在调用<code class="language-plaintext highlighter-rouge">debuginfo_eip(eip, &amp;info)</code>时，传入了一个虚拟地址，根据这个虚拟地址，首先查找stab table中的<code class="language-plaintext highlighter-rouge">N_SO(源文件类型)</code>,通过二分法查找，就可以锁定虚拟地址在stab中的范围.然后又在这个范围中查找<code class="language-plaintext highlighter-rouge">N_FUN</code>类型，可以继续缩小范围，再通过<code class="language-plaintext highlighter-rouge">N_SLINE</code>类型和虚拟地址找到确定的一行，这样就能得到这行代码的具体信息，包括代码所在的文件，函数，行号，以及通过计算可以得到offset。</p>
+
+<p>debuginfo_eip函数要补充的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">stab_binsearch</span><span class="p">(</span><span class="n">stabs</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">lline</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rline</span><span class="p">,</span> <span class="n">N_SLINE</span><span class="p">,</span> <span class="n">addr</span><span class="p">);</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">lfun</span> <span class="o">&lt;=</span> <span class="n">rfun</span><span class="p">)</span>
+    <span class="n">info</span><span class="o">-&gt;</span><span class="n">eip_line</span> <span class="o">=</span> <span class="n">stabs</span><span class="p">[</span><span class="n">lline</span><span class="p">].</span><span class="n">n_desc</span><span class="p">;</span>
+<span class="k">else</span>
+    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>mon_backtrace函数被修改成如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">mon_backtrace</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">,</span> <span class="k">struct</span> <span class="n">Trapframe</span> <span class="o">*</span><span class="n">tf</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">ebp</span> <span class="o">=</span> <span class="n">read_ebp</span><span class="p">();</span>
+    <span class="kt">uint32_t</span> <span class="n">eip</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">Eipdebuginfo</span> <span class="n">info</span><span class="p">;</span>
+    <span class="cp">#define TO_INT(x)  *((uint32_t*)(x))
+</span>    <span class="k">while</span> <span class="p">(</span><span class="n">ebp</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">eip</span> <span class="o">=</span> <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">4</span><span class="p">));</span>
+        <span class="n">cprintf</span><span class="p">(</span><span class="s">"ebp %08x  eip %08x  args %08x %08x %08x %08x %08x</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+                <span class="n">ebp</span><span class="p">,</span>                <span class="cm">/*ebp*/</span>
+                <span class="n">eip</span><span class="p">,</span>                <span class="cm">/*eip*/</span>
+                <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">8</span><span class="p">)),</span>    <span class="cm">/*arg1*/</span>
+                <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">12</span><span class="p">)),</span>   <span class="cm">/*arg2*/</span>
+                <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">16</span><span class="p">)),</span>   <span class="cm">/*arg3*/</span>
+                <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">20</span><span class="p">)),</span>   <span class="cm">/*arg4*/</span>
+                <span class="n">TO_INT</span><span class="p">((</span><span class="n">ebp</span><span class="o">+</span><span class="mi">24</span><span class="p">)));</span>  <span class="cm">/*arg5*/</span>
+
+        <span class="k">if</span><span class="p">(</span><span class="n">debuginfo_eip</span><span class="p">(</span><span class="n">eip</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">info</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">cprintf</span><span class="p">(</span><span class="s">"%s:%d: "</span><span class="p">,</span> <span class="n">info</span><span class="p">.</span><span class="n">eip_file</span><span class="p">,</span> <span class="n">info</span><span class="p">.</span><span class="n">eip_line</span><span class="p">);</span>
+            <span class="n">cprintf</span><span class="p">(</span><span class="s">"%.*s"</span><span class="p">,</span> <span class="n">info</span><span class="p">.</span><span class="n">eip_fn_namelen</span><span class="p">,</span> <span class="n">info</span><span class="p">.</span><span class="n">eip_fn_name</span><span class="p">);</span>
+            <span class="n">cprintf</span><span class="p">(</span><span class="s">"+%d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">eip</span> <span class="o">-</span> <span class="n">info</span><span class="p">.</span><span class="n">eip_fn_addr</span><span class="p">);</span> <span class="c1">//函数首地址 - 虚拟地址 = offset</span>
+        <span class="p">}</span> <span class="c1">// eip = *(ebp+1)</span>
+        <span class="n">ebp</span> <span class="o">=</span> <span class="n">TO_INT</span><span class="p">(</span><span class="n">ebp</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>这一题有点复杂,可以参考<a href="https://www.cnblogs.com/wuhualong/p/lab01_exercise12_print_more_info.html">这里</a></p>
+
+<p>最后强烈推荐<a href="https://www.cnblogs.com/wuhualong/p/mit_6-828_lab1.html">这个</a></p>
+
+<p><a href="http://www.voidcn.com/article/p-otgxarrw-ro.html">xv6 lab1 学习</a></p>
+:ET

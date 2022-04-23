@@ -1,0 +1,18 @@
+I"�<h3 id="页内跳转">页内跳转</h3>
+
+<p>页面锚点</p>
+
+<p><code class="language-plaintext highlighter-rouge">&lt;a href = "#id" target= "_self"&gt;&lt;/a&gt;</code></p>
+
+<p>禁止href跳转</p>
+
+<p><code class="language-plaintext highlighter-rouge">&lt;a href = "javascript:;"&gt;&lt;/a&gt;</code></p>
+
+<h3 id="列表">列表</h3>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;dl&gt;</span>
+    <span class="nt">&lt;dt&gt;</span>内核<span class="nt">&lt;/dt&gt;</span>
+    <span class="nt">&lt;dd&gt;</span>linux<span class="nt">&lt;/dd&gt;</span>
+<span class="nt">&lt;/dl&gt;</span>
+</code></pre></div></div>
+:ET

@@ -1,0 +1,828 @@
+I"�<blockquote>
+  <p>本文为原创</p>
+</blockquote>
+
+<p>在本练习中，将为网卡编写驱动程序。该卡将基于Intel 82540EM芯片，也称为E1000。</p>
+
+<p>但是，网卡驱动程序不足以使OS连接到Internet。在新的lab6代码中，提供了网络堆栈和网络服务器。</p>
+
+<p>除了编写驱动程序之外，还需要创建一个系统调用接口来授予对驱动程序的访问权限。将实现网络服务器，以在网络堆栈和驱动程序之间传输数据包。还将通过完成Web服务器将所有内容捆绑在一起。</p>
+
+<h2 id="qemu的虚拟网络">QEMU的虚拟网络</h2>
+
+<p>因为它不需要运行任何管理权限，所以使用QEMU的用户模式网络堆栈。QEMU的文档在<a href="http://wiki.qemu.org/download/qemu-doc.html#Using-the-user-mode-network-stack">这里</a>有更多关于用户网络的信息。我们已经更新了makefile，以启用QEMU的用户模式网络堆栈和虚拟E1000网卡。</p>
+
+<p>默认情况下，QEMU提供运行在IP 10.0.2.2上的虚拟路由器，并将为JOS分配IP地址10.0.2.15。为简单起见，我们将这些默认值直接到<code class="language-plaintext highlighter-rouge">net/ns.h</code>中。</p>
+
+<p>虽然QEMU的虚拟网络允许JOS连接连接到Internet，但JOS的10.0.2.15地址在QEMU内部运行的虚拟网络的外部没有任何意义（即QEMU充当NAT），因此我们无法直接连接到服务器即使在运行QEMU的主机中，也可以在JOS内部运行。为了解决这个问题，我们将QEMU配置为在主机上某个端口上运行服务器，该服务器仅连接到JOS中的某个端口，并在真实主机和虚拟网络之间来回穿梭数据。</p>
+
+<p>你将在端口7（echo）和80（http）上运行JOS服务器。为避免在共享的Athena机器上发生冲突，makefile会根据你的用户ID为这些机器生成转发端口。要查明QEMU​​转发到开发主机上的端口，请运行<code class="language-plaintext highlighter-rouge">make which-ports</code>。为了方便起见，makefile还提供了<code class="language-plaintext highlighter-rouge">make nc-7</code>和<code class="language-plaintext highlighter-rouge">make nc-80</code>，这使你可以直接与在终端中这些端口上运行的服务器进行交互。（这些目标仅连接到正在运行的QEMU实例；你必须单独启动QEMU本身。）</p>
+
+<h3 id="packet-inspection">Packet Inspection</h3>
+
+<p>makefile还配置QEMU的网络堆栈，以将所有传入和传出数据包记录到你的目录中的<code class="language-plaintext highlighter-rouge">qemu.pcap</code>。</p>
+
+<p>要获取捕获的数据包的十六进制/ASCII转储，请使用<code class="language-plaintext highlighter-rouge">tcpdump</code>，如下所示：</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tcpdump -XXnr qemu.pcap
+</code></pre></div></div>
+
+<p>或者，可以使用Wireshark检查pcap文件。 Wireshark还知道如何解码和检查数百种网络协议。如果你使用的是Athena，则必须使用Wireshark的前身ethereal</p>
+
+<h3 id="调试e1000">调试E1000</h3>
+
+<p>我们很幸运能够使用仿真硬件。由于E1000在软件中运行，因此仿真的E1000可以以用户可读的格式向我们报告其内部状态以及遇到的任何问题。通常，使用裸机编写驱动程序的开发人员将无法获得这种奢侈。</p>
+
+<p>E1000可以产生很多调试输出，因此你必须启用特定的日志记录通道。你可能会发现有用的一些渠道是：</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
+Flag        Meaning
+tx          Log packet transmit operations
+txerr       Log transmit ring errors
+rx          Log changes to RCTL
+rxfilter    Log filtering of incoming packets
+rxerr       Log receive ring errors
+unknown     Log reads and writes of unknown registers
+eeprom      Log reads from the EEPROM
+interrupt   Log interrupts and changes to interrupt registers.
+</code></pre></div></div>
+
+<p>例如，要启用<code class="language-plaintext highlighter-rouge">tx</code>和<code class="language-plaintext highlighter-rouge">txerr</code>日志记录，请使用<code class="language-plaintext highlighter-rouge">make E1000_DEBUG=tx,txerr ...</code>。</p>
+
+<p>注意：E1000_DEBUG标志仅在6.828版本的QEMU中起作用。</p>
+
+<p>你可以进一步使用软件仿真的硬件进行调试。如果你陷入困境，并且不了解E1000为什么没有按预期方式做出响应，则可以在<code class="language-plaintext highlighter-rouge">hw/net/e1000.c</code>中查看QEMU的E1000实现。</p>
+
+<h2 id="网络服务器">网络服务器</h2>
+
+<p>从头开始编写网络堆栈是一项艰巨的工作。我们将使用lwIP，这是一个开源的轻量级TCP/IP协议套件，其中包括一个网络堆栈。你可以在<a href="https://savannah.nongnu.org/projects/lwip/">此处</a>找到有关lwIP的更多信息。就我们而言，lwIP是一个黑箱，它实现了BSD套接字接口，并具有一个数据包输入端口和一个数据包输出端口。</p>
+
+<p>网络服务器实际上是四个环境的组合：</p>
+
+<ul>
+  <li>核心网络服务器环境（包括套接字调用分派器和lwIP）</li>
+  <li>输入环境</li>
+  <li>输出环境</li>
+  <li>计时器环境</li>
+</ul>
+
+<p>下图显示了不同的环境及其关系。该图显示了包括设备驱动程序在内的整个系统，稍后将进行介绍。在本实验中，你将实现以绿色突出显示的部分。</p>
+
+<p><img src="/assets/images/posts/2020-02-01-xv6 lab6/01.png" alt="" /></p>
+
+<h3 id="核心网络服务器环境">核心网络服务器环境</h3>
+
+<p>核心网络服务器环境由套接字调用分派器和lwIP本身组成。套接字调用调度程序的工作方式与文件服务器完全相同。用户环境使用stubs（在<code class="language-plaintext highlighter-rouge">lib/nsipc.c</code>中找到）将IPC消息发送到核心网络环境。如果查看<code class="language-plaintext highlighter-rouge">lib/nsipc.c</code>，你会发现核心网络服务器与文件服务器相同：<code class="language-plaintext highlighter-rouge">i386_init</code>使用<code class="language-plaintext highlighter-rouge">NS_TYPE_NS</code>创建了NS环境，因此我们扫描envs，寻找这种特殊的环境类型。对于每个用户环境IPC，网络服务器中的调度程序代表用户调用lwIP提供的相应BSD套接字接口功能。</p>
+
+<p>常规用户环境不直接使用<code class="language-plaintext highlighter-rouge">nsipc_ *</code>调用。相反，它们使用<code class="language-plaintext highlighter-rouge">lib/sockets.c</code>中的函数，该函数提供了基于文件描述符的套接字API。因此，用户环境通过文件描述符引用套接字，就像它们引用磁盘文件一样。许多操作（connect, accept等）特定于套接字，但是read，write和close都是通过<code class="language-plaintext highlighter-rouge">lib/fd.c</code>中的常规文件描述符设备分配代码进行。就像文件服务器为所有打开的文件维护内部唯一ID的方式一样，lwIP还会为所有打开的套接字生成唯一的ID。在文件服务器和网络服务器中，我们都使用存储在<code class="language-plaintext highlighter-rouge">struct Fd</code>中的信息将每个环境的文件描述符映射到这些唯一的ID空间。</p>
+
+<p>即使文件服务器和网络服务器的IPC调度程序看起来似乎相同，也存在关键区别。诸如accept和recv之类的BSD套接字调用可以无限期地阻塞。如果调度程序要让lwIP执行这些阻塞调用之一，则调度程序也将阻塞，并且整个系统一次只能有一个未完成的网络调用。由于这是不可接受的，因此网络服务器使用用户级线程来避免阻塞整个服务器环境。对于每个传入的IPC消息，调度程序都会创建一个线程并在新创建的线程中处理请求。如果线程阻塞，则只有该线程进入睡眠状态，而其他线程继续运行。</p>
+
+<p>除了核心网络环境外，还有三个辅助环境。除了接受来自用户应用程序的消息外，核心网络环境的调度程序还接受来自输入和计时器环境的消息。</p>
+
+<h3 id="输出环境">输出环境</h3>
+
+<p>为用户环境套接字提供服务时，lwIP将生成数据包供网卡传输。lwIP将使用<code class="language-plaintext highlighter-rouge">NSREQ_OUTPUT</code> IPC消息将每个要发送的数据包发送到输出辅助环境，并将该数据包附加在IPC消息的page参数中。输出环境负责接受这些消息，并通过即将创建的系统调用接口将数据包转发到设备驱动程序。</p>
+
+<h3 id="输入环境">输入环境</h3>
+
+<p>网卡收到的数据包需要注入到lwIP。对于设备驱动程序收到的每个数据包，输入环境（使用你将实现的内核系统调用）将数据包送到内核空间，然后使用<code class="language-plaintext highlighter-rouge">NSREQ_INPUT</code> IPC消息将数据包发送到核心服务器环境。</p>
+
+<p>数据包输入功能与核心网络环境分开，因为JOS使其难以同时接受IPC消息以及轮询或等待来自设备驱动程序的数据包。在JOS中，我们没有<code class="language-plaintext highlighter-rouge">select</code>系统调用，该调用将允许环境监视多个输入源以标识准备好处理哪些输入。</p>
+
+<p>如果看一下<code class="language-plaintext highlighter-rouge">net/input.c</code>和<code class="language-plaintext highlighter-rouge">net/output.c</code>，你会发现两者都需要实现。这主要是因为实现取决于你的系统调用接口。在实现驱动程序和系统调用接口之后，将为两个辅助环境编写代码。</p>
+
+<h3 id="计时器环境">计时器环境</h3>
+
+<p>计时器环境会定期向核心网络服务器发送<code class="language-plaintext highlighter-rouge">NSREQ_TIMER</code>类型的消息，通知其计时器已超时。lwIP使用此线程的计时器消息来实现各种网络定时。</p>
+
+<h3 id="part-a-初始化和发送数据包">Part A: 初始化和发送数据包</h3>
+
+<p>你的内核没有时间概念，因此我们需要设置它。当前，硬件每10毫秒产生一次时钟中断。在每次时钟中断处，都给变量增加一，以指示时间过去了10ms。这是在<code class="language-plaintext highlighter-rouge">kern/time.c</code>中实现的，但尚未完全集成到你的内核中。</p>
+
+<h4 id="exercise-1">Exercise 1</h4>
+
+<p>在<code class="language-plaintext highlighter-rouge">kern/trap.c</code>中为时钟中断添加一个对<code class="language-plaintext highlighter-rouge">time_tick</code>的调用。实现<code class="language-plaintext highlighter-rouge">sys_time_msec</code>并将其添加到<code class="language-plaintext highlighter-rouge">kern/syscall.c</code>中的<code class="language-plaintext highlighter-rouge">syscall</code>中，以便用户可以获取时间。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="k">if</span> <span class="p">(</span><span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_trapno</span> <span class="o">==</span> <span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="n">IRQ_TIMER</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">lapic_eoi</span><span class="p">();</span>
+        <span class="n">time_tick</span><span class="p">();</span> <span class="c1">// 在lab4的基础上增加</span>
+        <span class="n">sched_yield</span><span class="p">();</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+</code></pre></div></div>
+
+<p>syscall:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">case</span> <span class="n">SYS_time_msec</span><span class="p">:</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">sys_time_msec</span><span class="p">();</span>
+    <span class="k">break</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">sys_time_msec</code>的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span>
+<span class="nf">sys_time_msec</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="n">time_msec</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>使用<code class="language-plaintext highlighter-rouge">make INIT_CFLAGS=-DTEST_NO_NS run-testtime-nox</code>来测试你的代码。你应该看到环境从1秒间隔的5开始倒数。<code class="language-plaintext highlighter-rouge">-DTEST_NO_NS</code>禁用启动网络服务器环境，因为它会在这个实验中此时出现错误。</p>
+
+<h2 id="网卡">网卡</h2>
+
+<p>编写驱动程序需要深入了解硬件和提供给软件的接口。该实验文本将提供有关如何与E1000进行交互的高级概述，但是你在编写驱动程序时需要充分利用Intel的手册。</p>
+
+<h3 id="exercise-2">Exercise 2</h3>
+
+<p>浏览E1000的英特尔<a href="https://pdos.csail.mit.edu/6.828/2018/readings/hardware/8254x_GBe_SDM.pdf">软件开发人员手册</a>。本手册涵盖了几个紧密相关的以太网控制器。QEMU模拟82540EM。</p>
+
+<p>你现在应该浏览第二章，以了解该设备。要编写驱动程序，你需要熟悉第3章和第14章以及4.1（尽管不是4.1的小节）。你还需要参考第13章。其他章节主要介绍你的驱动程序不需要与之交互的E1000组件。现在不用担心细节了；只是了解文档的结构，以便以后查找。</p>
+
+<p>阅读手册时，请记住E1000是具有许多高级功能的复杂设备。有效的E1000驱动程序仅需要NIC提供的部分功能和接口。请仔细考虑连接网卡的最简单方法。强烈建议你先使用基本驱动程序，然后再使用高级功能。</p>
+
+<h3 id="pci接口">PCI接口</h3>
+
+<p>E1000是PCI设备，这意味着它已插入主板上的PCI总线。PCI总线具有地址，数据和中断线，并允许CPU与PCI设备进行通信，并且PCI设备可以读写内存。在使用PCI设备之前，需要先找到这些设备并初始化。通过遍历PCI总线以查找连接的设备。初始化是分配I/O和内存空间以及协商设备要使用的IRQ线的过程。</p>
+
+<p>我们在<code class="language-plaintext highlighter-rouge">kern/pci.c</code>中为你提供了PCI代码。要在引导过程中执行PCI初始化，PCI代码将遍历PCI总线以查找设备。找到设备后，它将读取其供应商ID和设备ID，并使用这两个值作为关键字来搜索<code class="language-plaintext highlighter-rouge">pci_attach_vendor</code>数组。该数组由<code class="language-plaintext highlighter-rouge">struct pci_driver</code>条目组成，如下所示：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">pci_driver</span> <span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">key1</span><span class="p">,</span> <span class="n">key2</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="p">(</span><span class="o">*</span><span class="n">attachfn</span><span class="p">)</span> <span class="p">(</span><span class="k">struct</span> <span class="n">pci_func</span> <span class="o">*</span><span class="n">pcif</span><span class="p">);</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>如果被发现的设备的供应商ID和设备ID与阵列中的条目匹配，则PCI代码将调用该条目的<code class="language-plaintext highlighter-rouge">attachfn</code>来执行设备初始化。（设备也可以通过类来标识，这是<code class="language-plaintext highlighter-rouge">kern/pci.c</code>中其他驱动程序表的作用。）</p>
+
+<p>Attach函数通过PCI函数进行初始化。尽管E1000仅提供一种功能，但PCI卡可以提供多种功能。这是我们在JOS中表示PCI功能的方式：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">pci_func</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">pci_bus</span> <span class="o">*</span><span class="n">bus</span><span class="p">;</span>
+
+    <span class="kt">uint32_t</span> <span class="n">dev</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">func</span><span class="p">;</span>
+
+    <span class="kt">uint32_t</span> <span class="n">dev_id</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">dev_class</span><span class="p">;</span>
+
+    <span class="kt">uint32_t</span> <span class="n">reg_base</span><span class="p">[</span><span class="mi">6</span><span class="p">];</span>
+    <span class="kt">uint32_t</span> <span class="n">reg_size</span><span class="p">[</span><span class="mi">6</span><span class="p">];</span>
+    <span class="kt">uint8_t</span> <span class="n">irq_line</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>以上结构反映了开发人员手册第4.1节表4-1中的某些条目。<code class="language-plaintext highlighter-rouge">struct pci_func</code>的最后三个条目记录了设备的协商内存，I/O和中断资源。<code class="language-plaintext highlighter-rouge">reg_base</code>和<code class="language-plaintext highlighter-rouge">reg_size</code>数组包含最多六个基地址寄存器或BAR的信息。<code class="language-plaintext highlighter-rouge">reg_base</code>存储内存映射的I/O区域（或I/O端口资源的基本I/O端口）的基本内存地址，<code class="language-plaintext highlighter-rouge">reg_size</code>包含<code class="language-plaintext highlighter-rouge">reg_base</code>中相应基本值的字节大小或I/O端口数，<code class="language-plaintext highlighter-rouge">irq_line</code>包含分配给设备进行中断的IRQ线。 E1000 BAR的具体含义在表4-2的后半部分给出。</p>
+
+<p>调用设备的附加功能时，已找到该设备但尚未启用。这意味着PCI代码尚未确定分配给设备的资源，例如地址空间和IRQ线，因为尚未填充<code class="language-plaintext highlighter-rouge">struct pci_func</code>结构的最后三个元素。Attach函数应调用<code class="language-plaintext highlighter-rouge">pci_func_enable</code>，它将启用设备，协商这些资源并填充<code class="language-plaintext highlighter-rouge">struct pci_func</code>。</p>
+
+<h4 id="exercise-3">Exercise 3</h4>
+
+<p>实现附加功能以初始化E1000。如果找到匹配的PCI设备，则在<code class="language-plaintext highlighter-rouge">kern/pci.c</code>中的<code class="language-plaintext highlighter-rouge">pci_attach_vendor</code>数组中添加一个条目，以触发你的功能（请确保将其放在标记表末尾的{0，0，0}条目之前）。你可以在5.2节中找到QEMU模拟的82540EM的供应商ID和设备ID。当启动时JOS扫描PCI总线时，你也应该看到这些内容。</p>
+
+<p>现在，只需通过<code class="language-plaintext highlighter-rouge">pci_func_enable</code>启用E1000设备。在整个实验中，我们将添加更多初始化设置。</p>
+
+<p>我们为你提供了<code class="language-plaintext highlighter-rouge">kern/e1000.c</code>和<code class="language-plaintext highlighter-rouge">kern/e1000.h</code>文件，这样你就无需弄乱构建系统。它们目前为空；你需要填写它们来完成这个练习。你可能还需要在内核的其他位置引入<code class="language-plaintext highlighter-rouge">e1000.h</code>文件。</p>
+
+<p><code class="language-plaintext highlighter-rouge">kern/e1000.c</code></p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">attachfn_enable</span><span class="p">(</span><span class="k">struct</span> <span class="n">pci_func</span> <span class="o">*</span><span class="n">pcif</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pci_func_enable</span><span class="p">(</span><span class="n">pcif</span><span class="p">);</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">kern/e1000.h</code></p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#ifndef JOS_KERN_E1000_H
+#define JOS_KERN_E1000_H
+#include</span> <span class="cpf">&lt;kern/pci.h&gt;</span><span class="cp">
+</span><span class="kt">int</span> <span class="nf">attachfn_enable</span><span class="p">(</span><span class="k">struct</span> <span class="n">pci_func</span> <span class="o">*</span><span class="n">pcif</span><span class="p">);</span>
+<span class="cp">#endif  // SOL &gt;= 6
+</span></code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">kern/pci.c</code>修改下列数组</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">pci_driver</span> <span class="n">pci_attach_vendor</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="p">{</span> <span class="mh">0x8086</span><span class="p">,</span> <span class="mh">0x100E</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">attachfn_enable</span> <span class="p">},</span>
+    <span class="p">{</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span> <span class="p">},</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>引导内核时，你应该看到它显示E1000卡的PCI功能已启用。你的代码现在应该通过了<code class="language-plaintext highlighter-rouge">make grade</code>的<code class="language-plaintext highlighter-rouge">pci attach</code>测试。</p>
+
+<h3 id="memory-mapped-io">Memory-mapped I/O</h3>
+
+<p>软件通过内存映射的I/O（MMIO）与E1000通信。你在JOS中已经看过两次了：CGA控制台和LAPIC都是能通过写入和读取<code class="language-plaintext highlighter-rouge">内存</code>来控制和查询的设备。但是这些读和写操作不会存储到DRAM中。他们直接去这些设备。</p>
+
+<p><code class="language-plaintext highlighter-rouge">pci_func_enable</code>与E1000协商MMIO区域，并将其基址和大小存储在BAR 0中（即<code class="language-plaintext highlighter-rouge">reg_base [0]</code>和<code class="language-plaintext highlighter-rouge">reg_size [0]</code>）。这是分配给设备的一系列物理内存地址，这意味着必须做一些事情才能通过虚拟地址访问它。由于MMIO区域被分配在很高的物理地址（通常大于3GB），并且由于JOS的256MB限制，你不能使用KADDR来访问它。因此，你必须创建一个新的内存映射。我们将使用<code class="language-plaintext highlighter-rouge">MMIOBASE</code>上方的区域（你来自实验4的<code class="language-plaintext highlighter-rouge">mmio_map_region</code>将确保我们不会覆盖LAPIC使用的映射）。由于PCI设备初始化发生在JOS创建用户环境之前，因此你可以在<code class="language-plaintext highlighter-rouge">kern_pgdir</code>中创建映射，该映射将始终可用。</p>
+
+<h4 id="exercise-4">Exercise 4</h4>
+
+<p>在附加函数中，通过调用<code class="language-plaintext highlighter-rouge">mmio_map_region</code>（你在实验4中编写来支持LAPIC的内存映射）为E1000的BAR 0创建虚拟内存映射。</p>
+
+<p>你需要在一个变量中记录此映射的位置，以便以后可以访问刚刚映射的寄存器。请查看<code class="language-plaintext highlighter-rouge">kern/lapic.c</code>中的lapic变量，以获取执行此操作的一种方法的示例。如果确实使用了指向设备寄存器映射的指针，请确保将其声明为<code class="language-plaintext highlighter-rouge">volatile</code>。否则，编译器将允许缓存值并重新排序对该内存的访问。</p>
+
+<p>要测试你的映射是否正确，可以打印出设备状态寄存器的值（第13.4.2节）。这是一个4字节的寄存器，从寄存器空间的第8个字节开始。你应该得到的是<code class="language-plaintext highlighter-rouge">0x80080783</code>，这个值表示全双工链接的速度能达到1000 MB/s。</p>
+
+<p>提示：你将需要很多常量，例如寄存器的位置和位掩码的值。将这些内容从开发人员手册中复制出来很容易出错，而错误可能导致需要大量的调试。建议把QEMU的<code class="language-plaintext highlighter-rouge">e1000_hw.h</code>作为指导。不建议逐字复制它，因为它定义的内容远远超出你的实际需要，并且可能无法按照你想要的方式进行定义。</p>
+
+<p>继续编写<code class="language-plaintext highlighter-rouge">kern/e1000.c</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">attachfn_enable</span><span class="p">(</span><span class="k">struct</span> <span class="n">pci_func</span> <span class="o">*</span><span class="n">pcif</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pci_func_enable</span><span class="p">(</span><span class="n">pcif</span><span class="p">);</span>
+    <span class="c1">//为reg_base的物理地址映射虚拟内存</span>
+    <span class="n">bar_va</span> <span class="o">=</span> <span class="n">mmio_map_region</span><span class="p">(</span><span class="n">pcif</span><span class="o">-&gt;</span><span class="n">reg_base</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pcif</span><span class="o">-&gt;</span><span class="n">reg_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+    <span class="kt">uint32_t</span> <span class="o">*</span><span class="n">status_reg</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="mh">0x8</span><span class="p">);</span>
+    <span class="c1">// 查看状态寄存器的值是否是0x80080783</span>
+    <span class="n">assert</span><span class="p">(</span><span class="o">*</span><span class="n">status_reg</span> <span class="o">==</span> <span class="mh">0x80080783</span><span class="p">);</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">kern/e1000.h</code>需要添加代码：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">volatile</span> <span class="kt">void</span> <span class="o">*</span><span class="n">bar_va</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h3 id="dma">DMA</h3>
+
+<p>您可以想象通过写入和读取E1000的寄存器来发送和接收数据包，但这会很慢，并且需要E1000在内部缓冲数据包数据。相反，E1000使用直接内存访问或DMA直接从内存读取和写入数据包数据，而无需使用CPU。驱动程序负责为发送和接收队列分配内存，设置DMA描述符，并使用这些队列的位置配置E1000，但之后的所有操作都是异步的。为了发送数据包，驱动程序将其复制到发送队列中的下一个DMA描述符中，并通知E1000另一个数据包可用。当有时间发送数据包时，E1000会将数据从描述符中复制出来。同样，当E1000接收到一个数据包时，它会将其复制到接收队列中的下一个DMA描述符中，有机会的话，驱动程序就会读取该描述符。</p>
+
+<p>在高层，接收和发送队列非常相似。两者都由一系列描述符组成。尽管这些描述符的确切结构有所不同，但是每个描述符都包含一些标志和包含数据包数据的缓冲区的物理地址（或者是要发送给网卡的数据包数据，或者是OS为网卡分配的缓冲区，用于将接收到的数据包写入网卡）。</p>
+
+<p>队列被实现为循环数组，这意味着当卡或驱动程序到达队列的末尾时，它会回绕到开头。两者都有头指针和尾指针，队列的内容是这两个指针之间的描述符。硬件始终从头消耗描述符并移动头指针，而驱动程序总是添加描述符并移动尾指针。传输队列中的描述符表示等待发送的数据包（因此，在稳定状态下，传输队列为空）。对于接收队列，队列中的描述符是卡可以接收数据包的空闲描述符（因此，在稳定状态下，接收队列由所有可用的接收描述符组成）。在不混淆E1000的情况下正确更新尾部寄存器非常棘手；小心！</p>
+
+<p>指向这些数组的指针以及描述符中的数据包缓冲区的地址都必须是物理地址，因为硬件无需通过MMU即可直接在物理RAM之间执行DMA。</p>
+
+<h2 id="传送数据包">传送数据包</h2>
+
+<p>E1000的发送和接收功能基本上彼此独立，因此我们可以一次完成一个工作。我们将首先发送数据包的原因仅仅是因为我们无法在不发送<code class="language-plaintext highlighter-rouge">I'm here!</code>的情况下测试接收。</p>
+
+<p>首先，你必须按照14.5节中所述的步骤初始化要传输的卡（不必担心这些小节）。传输初始化的第一步是设置传输队列。队列的精确结构在3.4节中描述，描述符的结构在3.3.3节中有描述。我们将不会使用E1000的TCP卸载功能，因此你可以专注于<code class="language-plaintext highlighter-rouge">旧版传输描述符格式</code>。你现在应该阅读这些部分，并熟悉这些结构。</p>
+
+<h3 id="c结构">C结构</h3>
+
+<p>你会发现使用C的<code class="language-plaintext highlighter-rouge">struct</code>来描述E1000的结构很方便。正如你在<code class="language-plaintext highlighter-rouge">struct Trapframe</code>之类的结构中看到的那样，C的<code class="language-plaintext highlighter-rouge">struct</code>使你可以精确地在内存中布局数据。C可以在字段之间插入填充，但是E1000的结构布局使得这不成问题。如果确实遇到字段对齐问题，请查看GCC的<code class="language-plaintext highlighter-rouge">packed</code>属性。</p>
+
+<p>例如，请考虑手册的表3-8中给出如下旧版传输描述符：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>  <span class="mi">63</span>            <span class="mi">48</span> <span class="mi">47</span>   <span class="mi">40</span> <span class="mi">39</span>   <span class="mi">32</span> <span class="mi">31</span>   <span class="mi">24</span> <span class="mi">23</span>   <span class="mi">16</span> <span class="mi">15</span>             <span class="mi">0</span>
+  <span class="o">+---------------------------------------------------------------+</span>
+  <span class="o">|</span>                         <span class="n">Buffer</span> <span class="n">address</span>                        <span class="o">|</span>
+  <span class="o">+---------------+-------+-------+-------+-------+---------------+</span>
+  <span class="o">|</span>    <span class="n">Special</span>    <span class="o">|</span>  <span class="n">CSS</span>  <span class="o">|</span> <span class="n">Status</span><span class="o">|</span>  <span class="n">Cmd</span>  <span class="o">|</span>  <span class="n">CSO</span>  <span class="o">|</span>    <span class="n">Length</span>     <span class="o">|</span>
+  <span class="o">+---------------+-------+-------+-------+-------+---------------+</span>
+</code></pre></div></div>
+
+<p>结构的第一个字节从右上角开始，因此要将其转换为C的<code class="language-plaintext highlighter-rouge">struct</code>，必须从右到左，从上到下读取。你会发现所有字段甚至都非常适合标准大小的类型：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">tx_desc</span>
+<span class="p">{</span>
+    <span class="kt">uint64_t</span> <span class="n">addr</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">length</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">cso</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">cmd</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">status</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">css</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">special</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>你的驱动程序将必须为传输描述符数组和传输描述符指向的数据包缓冲区保留内存。有多种方法可以执行此操作，从动态分配页面到简单地在全局变量中声明页面都可以。无论你选择什么，请记住E1000能直接访问物理内存，这意味着它访问的任何缓冲区必须在物理内存中是连续的。</p>
+
+<p>还有多种处理数据包缓冲区的方法。我们建议最简单的方法是，在驱动程序初始化期间为数据包缓冲区的每个描述符保留空间，并简单地将数据包数据复制到这些预分配的缓冲区中或从其中复制出来。以太网数据包的最大大小为1518字节，这限制了这些缓冲区的大小。更复杂的驱动程序可以动态分配数据包缓冲区（例如，以减少网络使用率较低时的内存开销），甚至可以传递到用户空间直接提供的缓冲区（一种称为<code class="language-plaintext highlighter-rouge">零复制</code>的技术），但最好还是从简单开始。</p>
+
+<h4 id="exercise-5">Exercise 5</h4>
+
+<p>执行第14.5节（但不包括其子节）中描述的初始化步骤。将第13节作为初始化过程所引用的寄存器的参考，并使用3.3.3和3.4节作为发送描述符和发送描述符数组的参考。</p>
+
+<p>请注意对发送描述符数组的对齐要求以及对该数组长度的限制。由于<code class="language-plaintext highlighter-rouge">TDLEN</code>必须对齐128字节，每个传输描述符为16字节，因此你的传输描述符数组将需要8个传输描述符的某个倍数。但是，请勿使用超过64个的描述符，否则我们的测试将无法测试传输环溢出。</p>
+
+<p>对于TCTL.COLD，你可以假定为全双工操作。对于TIPG，请参阅第13.4.34节的表13-77中描述的IEEE 802.3标准的IPG的默认值（不要使用第14.5节的表中的值）。</p>
+
+<p>按照14.5节的描述初始化。步骤如下：</p>
+
+<ol>
+  <li>分配一块内存用作发送描述符队列，起始地址要16字节对齐。用基地址填充(TDBAL/TDBAH) 寄存器。</li>
+  <li>设置(TDLEN)寄存器，该寄存器保存发送描述符队列长度，必须128字节对齐。</li>
+  <li>设置(TDH/TDT)寄存器，这两个寄存器都是发送描述符队列的下标。分别指向头部和尾部。应该初始化为0。</li>
+  <li>初始化TCTL寄存器。设置TCTL.EN位为1，设置TCTL.PSP位为1。设置TCTL.CT为10h。设置TCTL.COLD为40h。</li>
+  <li>设置TIPG寄存器。</li>
+</ol>
+
+<p><code class="language-plaintext highlighter-rouge">kern/e1000.c</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">tx_desc</span> <span class="n">tx_d</span><span class="p">[</span><span class="n">TXRING_LEN</span><span class="p">]</span> <span class="n">__attribute__</span><span class="p">((</span><span class="n">aligned</span><span class="p">(</span><span class="n">PGSIZE</span><span class="p">)));</span>
+<span class="k">struct</span> <span class="n">packet</span> <span class="n">pbuf</span><span class="p">[</span><span class="n">TXRING_LEN</span><span class="p">]</span> <span class="n">__attribute__</span><span class="p">((</span><span class="n">aligned</span> <span class="p">(</span><span class="n">PGSIZE</span><span class="p">)));</span>
+
+<span class="c1">// LAB 6: Your driver code here</span>
+<span class="kt">int</span> <span class="nf">attachfn_enable</span><span class="p">(</span><span class="k">struct</span> <span class="n">pci_func</span> <span class="o">*</span><span class="n">pcif</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pci_func_enable</span><span class="p">(</span><span class="n">pcif</span><span class="p">);</span>
+
+    <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">TXRING_LEN</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">){</span>
+        <span class="n">memset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tx_d</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">tx_d</span><span class="p">[</span><span class="n">i</span><span class="p">]));</span>
+        <span class="c1">//tx_d[i].addr = PADDR(&amp;(pbuf[i]));</span>
+        <span class="n">tx_d</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">status</span> <span class="o">=</span> <span class="n">TXD_STATUS_DD</span><span class="p">;</span>
+        <span class="n">tx_d</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">cmd</span> <span class="o">=</span> <span class="n">TXD_CMD_RS</span> <span class="o">|</span> <span class="n">TXD_CMD_EOP</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">bar_va</span> <span class="o">=</span> <span class="n">mmio_map_region</span><span class="p">(</span><span class="n">pcif</span><span class="o">-&gt;</span><span class="n">reg_base</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pcif</span><span class="o">-&gt;</span><span class="n">reg_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span> <span class="c1">//为reg_base分配内存</span>
+    <span class="kt">uint32_t</span> <span class="o">*</span><span class="n">status_reg</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="mh">0x8</span><span class="p">);</span> <span class="c1">//查看var_va的从偏移量8开始的值</span>
+    <span class="n">assert</span><span class="p">(</span><span class="o">*</span><span class="n">status_reg</span> <span class="o">==</span> <span class="mh">0x80080783</span><span class="p">);</span>
+
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDBAL</span><span class="p">)</span> <span class="o">=</span> <span class="n">PADDR</span><span class="p">(</span><span class="n">tx_d</span><span class="p">);</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDBAH</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDLEN</span><span class="p">)</span> <span class="o">=</span> <span class="n">TXRING_LEN</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">tx_desc</span><span class="p">);</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDH</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDT</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">tctl</span> <span class="o">=</span> <span class="n">TCTL_EN</span> <span class="o">|</span> <span class="n">TCTL_PSP</span> <span class="o">|</span> <span class="p">(</span><span class="n">TCTL_CT</span> <span class="o">&amp;</span> <span class="p">(</span><span class="mh">0x10</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">))</span> <span class="o">|</span> <span class="p">(</span><span class="n">TCTL_COLD</span> <span class="o">&amp;</span> <span class="p">(</span><span class="mh">0x40</span> <span class="o">&lt;&lt;</span> <span class="mi">12</span><span class="p">));</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TCTL</span><span class="p">)</span> <span class="o">=</span> <span class="n">tctl</span><span class="p">;</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TIPG</span><span class="p">)</span> <span class="o">=</span> <span class="mi">10</span> <span class="o">|</span> <span class="p">(</span><span class="mi">8</span> <span class="o">&lt;&lt;</span> <span class="mi">10</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="mi">12</span> <span class="o">&lt;&lt;</span> <span class="mi">20</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">kern/e1000.h</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#ifndef JOS_KERN_E1000_H
+#define JOS_KERN_E1000_H
+#include</span> <span class="cpf">&lt;kern/pci.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;kern/env.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;inc/ns.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;inc/error.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;inc/string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;inc/x86.h&gt;</span><span class="cp">
+</span>
+<span class="k">volatile</span> <span class="kt">void</span> <span class="o">*</span><span class="n">bar_va</span><span class="p">;</span>
+
+<span class="k">struct</span> <span class="n">tx_desc</span>
+<span class="p">{</span>
+    <span class="kt">uint64_t</span> <span class="n">addr</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">length</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">cso</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">cmd</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">status</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">css</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">special</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">__attribute__</span><span class="p">((</span><span class="n">packed</span><span class="p">));</span>
+
+<span class="k">struct</span> <span class="n">packet</span>
+<span class="p">{</span>
+    <span class="kt">char</span> <span class="n">body</span><span class="p">[</span><span class="mi">2048</span><span class="p">];</span>
+<span class="p">};</span>
+
+<span class="cp">#define TXRING_LEN 48
+#define RDLEN 0x02808
+#define RDBAL 0x02800
+#define RDBAH 0x02804
+#define TDBAL 0x03800
+#define TDBAH 0x03804
+#define TDLEN 0x03808
+#define TDH 0x03810
+#define TDT 0x03818
+#define TIPG 0x00410
+#define TCTL 0x00400
+</span>    <span class="cp">#define TCTL_EN 0x00000002
+</span>    <span class="cp">#define TCTL_PSP 0x00000008
+</span>    <span class="cp">#define TCTL_CT 0x000000ff0
+</span>    <span class="cp">#define TCTL_COLD 0x007ff000
+#define TXD_STATUS_DD 0x01
+#define TXD_CMD_RS 0x08
+#define TXD_CMD_EOP 0x01
+#define TDESC_CMD_RS 0x08
+#define TDESC_CMD_EOP 0x01
+#define TDESC_STATUS_DD 0x01
+</span>
+<span class="cp">#define TX_RECV_ARRAY_LEN 128
+#define RAL 0x05400
+#define RAH 0x05404
+#define MTA_START 0x05200
+#define MTA_END 0x053fc
+#define IMS 0x000d0
+#define RDBAL 0x02800
+#define RDBAH 0x02804
+#define RDLEN 0x02808
+#define RDH 0x02810
+#define RDT 0x02818
+#define RCTL 0x00100
+</span>    <span class="cp">#define RCTL_EN 0x00000002
+</span>    <span class="cp">#define RCTL_BAM 0x00008000
+</span>    <span class="cp">#define RCTL_BSIZE 0x00030000
+</span>    <span class="cp">#define RCTL_BSEX 0x04000000            //Buffer Size Extension
+</span>    <span class="cp">#define RCTL_SECRC 0x08000000           //Strip Ethernet CRC from incoming packet
+</span>
+
+
+<span class="kt">int</span> <span class="nf">attachfn_enable</span><span class="p">(</span><span class="k">struct</span> <span class="n">pci_func</span> <span class="o">*</span><span class="n">pcif</span><span class="p">);</span>
+<span class="kt">int</span> <span class="nf">try_transmit</span><span class="p">(</span><span class="n">physaddr_t</span> <span class="n">addr</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">);</span>
+<span class="kt">int</span> <span class="nf">try_receive</span><span class="p">(</span><span class="k">struct</span> <span class="n">jif_pkt</span> <span class="o">*</span><span class="n">jp</span><span class="p">);</span>
+
+<span class="cp">#endif  // SOL &gt;= 6
+</span>
+</code></pre></div></div>
+
+<p>尝试运行<code class="language-plaintext highlighter-rouge">make E1000_DEBUG=TXERR,TX qemu-nox</code>。如果你正在使用课程提供的qemu，则在设置TDT寄存器时应该会看到<code class="language-plaintext highlighter-rouge">e1000：tx disable</code>这个消息（因为这是在设置TCTL.EN之前发生的），而没有其他<code class="language-plaintext highlighter-rouge">e1000</code>消息。</p>
+
+<p>现在，传输队列已初始化，你需要编写代码以传输数据包，并使用户空间能通过系统调用访问。要传输数据包，你必须将其添加到传输队列的末尾，这意味着需要将数据复制到下一个数据包缓冲区，然后更新TDT（传输描述符尾部）寄存器以通知网卡中存在一个数据包。（请注意，TDT是传输描述符数组的索引，而不是字节偏移量；文档对此并不十分清楚。）</p>
+
+<p>但是，发送队列只有这么大。如果网卡落后于传输数据包并且传输队列已满怎么办？为了检测到这种情况，你需要使用E1000的一些反馈。不幸的是，你不能只使用TDH（发送描述符头）寄存器。该文档明确指出，从软件读取该寄存器是不可靠的。但是，如果你在发送描述符的命令字段中设置了RS位，则当卡已在该描述符中发送了数据包时，卡将在描述符的状态字段中将DD位置为1。如果已将描述符的DD位置1，则可以安全地回收该描述符并使用它传输另一个数据包。</p>
+
+<p>如果用户调用传输系统调用，但下一个描述符的DD位未设置，然后显示传输队列已满怎么办？你必须决定在这种情况下该怎么做。你可以简单地丢弃数据包。网络协议对此具有一定的弹性，但是如果丢弃大量的数据包，则该协议可能无法恢复。你可以改为告诉用户环境它必须重传，就像对<code class="language-plaintext highlighter-rouge">ipc_send</code>所做的一样。这样做的好处是可以推迟环境生成数据。</p>
+
+<h4 id="exercise-6">Exercise 6</h4>
+
+<p>通过检查下一个描述符是否空闲，将包数据复制到下一个描述符并更新TDT，编写一种函数来发送数据包。确保处理传输队列已满。</p>
+
+<p><code class="language-plaintext highlighter-rouge">kern/e1000.c</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">try_transmit</span><span class="p">(</span><span class="n">physaddr_t</span> <span class="n">pa</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">tdt</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDT</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">tdt</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">==</span> <span class="n">TXRING_LEN</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="n">tx_d</span><span class="p">[(</span><span class="n">tdt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">TXRING_LEN</span><span class="p">].</span><span class="n">status</span> <span class="o">&amp;</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+
+    <span class="n">tx_d</span><span class="p">[</span><span class="n">tdt</span><span class="p">].</span><span class="n">addr</span> <span class="o">=</span> <span class="n">pa</span><span class="p">;</span>
+    <span class="n">tx_d</span><span class="p">[</span><span class="n">tdt</span><span class="p">].</span><span class="n">length</span> <span class="o">=</span> <span class="n">len</span><span class="p">;</span>
+    <span class="n">tx_d</span><span class="p">[</span><span class="n">tdt</span><span class="p">].</span><span class="n">status</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">TDESC_STATUS_DD</span><span class="p">;</span>
+    <span class="n">tx_d</span><span class="p">[</span><span class="n">tdt</span><span class="p">].</span><span class="n">cmd</span> <span class="o">|=</span> <span class="p">(</span><span class="n">TDESC_CMD_EOP</span> <span class="o">|</span> <span class="n">TDESC_CMD_RS</span><span class="p">);</span>
+    <span class="n">tdt</span> <span class="o">=</span> <span class="p">(</span><span class="n">tdt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">TXRING_LEN</span><span class="p">;</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDT</span><span class="p">)</span> <span class="o">=</span> <span class="n">tdt</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>现在是测试你的数据包传输代码的好时机。通过直接从内核调用传输函数，尝试仅传输几个数据包。你无需创建符合任何特定网络协议的数据包即可对此进行测试。运行<code class="language-plaintext highlighter-rouge">make E1000_DEBUG=TXERR,TX qemu-nox</code>运行测试。你应该看到类似下面：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>e1000: index 0: 0x271f00 : 9000002a 0
+...
+</code></pre></div></div>
+
+<p>当你传输数据包时。每行给出传输数组中的索引，和该传输描述符的缓冲区地址，cmd/CSO/length字段以及special/CSS/status字段。如果QEMU没有显示你希望从传输描述符中获取的值，请检查你是否填写了正确的描述符，以及你是否正确配置了<code class="language-plaintext highlighter-rouge">TDBAL</code>和<code class="language-plaintext highlighter-rouge">TDBAH</code>。如果收到<code class="language-plaintext highlighter-rouge">e1000: TDH wraparound @0, TDT x, TDLEN y</code>消息，则表示E1000一直循环执行传输队列而没有停止（如果QEMU没有检查，它将进入无限循环），这可能意味着你没有正确处理<code class="language-plaintext highlighter-rouge">TDT</code>。如果收到很多<code class="language-plaintext highlighter-rouge">e1000：tx disable</code>消息，则说明你没有正确设置发送控制寄存器。</p>
+
+<p>QEMU运行后，你可以运行<code class="language-plaintext highlighter-rouge">tcpdump -XXnr qemu.pcap</code>来查看传输的数据包数据。如果你看到了QEMU打印出预期的`e1000：index”消息，但你的数据包捕获为空，请再次检查你是否填写了每个必要的字段并在传输描述符中添加了一些位（E1000可能检查通过了传输描述符，但没有检查通过它认为必须要发送任何东西）。</p>
+
+<h4 id="exercise-7">Exercise 7</h4>
+
+<p>添加一个系统调用，使用户空间可以通过统一系统调用来传输数据包。确切的接口由你决定，但不要忘记检查从用户空间传递到内核的任何指针。</p>
+
+<p><code class="language-plaintext highlighter-rouge">kern/syscall.c</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#include</span><span class="cpf">&lt;kern/e1000.h&gt;</span><span class="cp">
+</span><span class="k">static</span> <span class="kt">int</span>
+<span class="nf">sys_packet_try_send</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">addr</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">size</span> <span class="o">&gt;</span> <span class="n">PGSIZE</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">E_INVAL</span><span class="p">;</span>
+    <span class="n">user_mem_assert</span><span class="p">(</span><span class="n">curenv</span><span class="p">,</span> <span class="n">addr</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">PTE_U</span><span class="p">);</span>
+    <span class="n">pte_t</span> <span class="o">*</span><span class="n">pte</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">PageInfo</span> <span class="o">*</span><span class="n">pp</span> <span class="o">=</span> <span class="n">page_lookup</span><span class="p">(</span><span class="n">curenv</span><span class="o">-&gt;</span><span class="n">env_pgdir</span><span class="p">,</span> <span class="n">addr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pte</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">pp</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">E_INVAL</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">try_transmit</span><span class="p">(</span><span class="n">page2pa</span><span class="p">(</span><span class="n">pp</span><span class="p">)</span> <span class="o">+</span> <span class="p">((</span><span class="kt">uint32_t</span><span class="p">)</span> <span class="n">addr</span> <span class="o">&amp;</span> <span class="mh">0xfff</span><span class="p">),</span> <span class="n">size</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">case</span> <span class="n">SYS_packet_try_send</span><span class="p">:</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">sys_packet_try_send</span><span class="p">((</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">a1</span><span class="p">,</span> <span class="n">a2</span><span class="p">);</span>
+    <span class="k">break</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">inc/syscall.h</code>中在枚举变量里添加：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">SYS_packet_try_send</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">lib/syscall.c</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span>
+<span class="nf">sys_packet_try_send</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">addr</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="n">syscall</span><span class="p">(</span><span class="n">SYS_packet_try_send</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="kt">uint32_t</span><span class="p">)</span><span class="n">addr</span><span class="p">,</span> <span class="n">len</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">inc/lib.h</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">sys_packet_try_send</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">addr</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h2 id="传输数据包网络服务">传输数据包：网络服务</h2>
+
+<p>现在，你已经在设备驱动程序的发送端有了一个系统调用接口，是时候发送数据包了。输出辅助环境的目标是循环执行以下操作：接受来自核心网络服务器的<code class="language-plaintext highlighter-rouge">NSREQ_OUTPUT</code>IPC消息，并使用上面添加的系统调用将这些IPC消息的数据包发送到网络设备驱动程序。 <code class="language-plaintext highlighter-rouge">NSREQ_OUTPUT</code>IPC由<code class="language-plaintext highlighter-rouge">net/lwip/jos/jif/jif.c</code>中的<code class="language-plaintext highlighter-rouge">low_level_output</code>函数发送，该函数将信息粘贴到JOS的网络系统的lwIP堆栈。每个IPC将包括一个由<code class="language-plaintext highlighter-rouge">union Nsipc</code>组成的页面，其数据包位于其<code class="language-plaintext highlighter-rouge">struct jif_pkt pkt</code>字段中（请参见<code class="language-plaintext highlighter-rouge">inc/ns.h</code>）。<code class="language-plaintext highlighter-rouge">struct jif_pkt</code>看起来像:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">jif_pkt</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">jp_len</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">jp_data</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">jp_len</code>表示数据包的长度。IPC页面上的所有后续字节专用于数据包内容。在结构末尾使用零长度数组（如<code class="language-plaintext highlighter-rouge">jp_data</code>）是一种常见的C技巧，用于表示没有预定长度的缓冲区。由于C不执行数组边界检查，因此只要确保在该结构之后有足够的未使用内存，就可以使用<code class="language-plaintext highlighter-rouge">jp_data</code>，就好像它是任意大小的数组一样。</p>
+
+<p>当设备驱动程序的传输队列中没有更多空间时，请注意设备驱动程序的输出环境和核心网络服务器之间的交互。核心网络服务器使用IPC将数据包发送到输出环境。如果由于发送数据包系统调用因为驱动程序没有更多的缓冲区可容纳新数据包而导致输出环境暂停，则核心网络服务器将等待输出服务器能够接受IPC调用。</p>
+
+<h3 id="exercise-8">Exercise 8</h3>
+
+<p>Implement <code class="language-plaintext highlighter-rouge">net/output.c</code>.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span>
+<span class="nf">output</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">ns_envid</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">binaryname</span> <span class="o">=</span> <span class="s">"ns_output"</span><span class="p">;</span>
+
+    <span class="c1">// LAB 6: Your code here:</span>
+    <span class="c1">//  - read a packet from the network server</span>
+    <span class="c1">//  - send the packet to the device driver</span>
+    <span class="kt">uint32_t</span> <span class="n">whom</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">perm</span><span class="p">;</span>
+    <span class="kt">int32_t</span> <span class="n">req</span><span class="p">;</span>
+
+    <span class="k">while</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">ipc_recv</span><span class="p">((</span><span class="n">envid_t</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">whom</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">nsipcbuf</span><span class="p">,</span>  <span class="o">&amp;</span><span class="n">perm</span><span class="p">);</span>     <span class="c1">// 接收核心网络进程发来的请求</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">req</span> <span class="o">!=</span> <span class="n">NSREQ_OUTPUT</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">cprintf</span><span class="p">(</span><span class="s">"not a nsreq output</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+            <span class="k">continue</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">struct</span> <span class="n">jif_pkt</span> <span class="o">*</span><span class="n">pkt</span> <span class="o">=</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">nsipcbuf</span><span class="p">.</span><span class="n">pkt</span><span class="p">);</span>
+
+        <span class="n">cprintf</span><span class="p">(</span><span class="s">"data: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">pkt</span><span class="o">-&gt;</span><span class="n">jp_data</span><span class="p">);</span>
+        <span class="k">while</span> <span class="p">(</span><span class="n">sys_packet_try_send</span><span class="p">(</span><span class="n">pkt</span><span class="o">-&gt;</span><span class="n">jp_data</span><span class="p">,</span> <span class="n">pkt</span><span class="o">-&gt;</span><span class="n">jp_len</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>   <span class="c1">// 通过系统调用发送数据包</span>
+            <span class="n">sys_yield</span><span class="p">();</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>你可以使用<code class="language-plaintext highlighter-rouge">net/testoutput.c</code>来测试你的代码，而无需涉及整个网络服务器。尝试运行<code class="language-plaintext highlighter-rouge">make E1000_DEBUG=TXERR,TX run-net_testoutput-nox</code>。你应该看到类似下面：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Transmitting packet 0
+e1000: index 0: 0x271f00 : 9000009 0
+Transmitting packet 1
+e1000: index 1: 0x2724ee : 9000009 0
+...
+</code></pre></div></div>
+
+<p>并且运行<code class="language-plaintext highlighter-rouge">tcpdump -XXnr qemu.pcap</code>应该输出如下：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>reading from file qemu.pcap, link-type EN10MB <span class="o">(</span>Ethernet<span class="o">)</span>
+<span class="nt">-5</span>:00:00.600186 <span class="o">[</span>|ether]
+    0x0000:  5061 636b 6574 2030 30                   Packet.00
+<span class="nt">-5</span>:00:00.610080 <span class="o">[</span>|ether]
+    0x0000:  5061 636b 6574 2030 31                   Packet.01
+...
+</code></pre></div></div>
+
+<p>要使用更大的数据包计数进行测试，请尝试使用<code class="language-plaintext highlighter-rouge">make E1000_DEBUG=TXERR,TX NET_CFLAGS=-DTESTOUTPUT_COUNT=100 run-net_testoutput</code>。如果这使得发送队列溢出，请仔细检查你是否正确处理了DD状态位，并告知硬件已设置DD状态位（使用RS命令位）。</p>
+
+<p>你的代码应通过<code class="language-plaintext highlighter-rouge">make grade</code>的<code class="language-plaintext highlighter-rouge">testoutput</code>测试，Part A部分也能通过了。</p>
+
+<h3 id="question">Question</h3>
+
+<p>你如何实现传输？如果传输环已满，你该怎么办？</p>
+
+<p>等待执行</p>
+
+<h2 id="part-b-接收数据包和web服务器">Part B: 接收数据包和Web服务器</h2>
+
+<h3 id="接收数据包">接收数据包</h3>
+
+<p>就像传输数据包一样，你必须为E1000配置接收数据包的功能，并提供接收描述符队列和接收描述符。3.2节描述了数据包接收的工作方式，包括接收队列结构和接收描述符，初始化过程在14.4节中进行了详细说明。</p>
+
+<h4 id="exercise-9">Exercise 9</h4>
+
+<p>阅读第3.2节。你可以忽略有关中断和校验和的卸载的任何信息（如果你以后决定使用这些功能，则可以返回到这些部分），并且不必担心阈值的详细信息以及卡的内部缓存如何工作。</p>
+
+<p>接收队列与发送队列非常相似，不同之处在于它由等待输入数据包填充的空数据包缓冲区组成。因此，当网络空闲时，发送队列为空（因为已发送所有数据包），但接收队列已满（为空的数据包缓冲区）。</p>
+
+<p>当E1000收到一个数据包时，它首先检查它是否与卡上已配置的过滤器匹配（例如，查看该数据包是否寻址到该E1000的MAC地址），并在不匹配任何过滤器的情况下忽略该数据包。否则，E1000尝试从接收队列的开头检索下一个接收描述符。如果头部（RDH）追上了尾部（RDT），则接收队列中没有可用的描述符，因此卡将丢弃数据包。如果有空闲的接收描述符，它将把数据包数据复制到描述符所指向的缓冲区中，设置描述符的DD（描述符完成）和EOP（数据包结尾）状态位，并增加RDH。</p>
+
+<p>如果E1000接收大于一个描述符的数据包，它将从接收队列中检索所需数量的描述符，以存储数据包的全部内容。为了表明这已经发生，它将在所有的这些描述符上设置DD状态位，但仅在这些描述符的最后一个上设置EOP状态位。你可以在驱动程序中实现这种可能性，也可以简单地将卡配置为不接受<code class="language-plaintext highlighter-rouge">大数据包</code>（也称为巨型帧），并确保接收缓冲区足够大以存储最大可能的标准以太网数据包（1518字节））。</p>
+
+<h4 id="exercise-10">Exercise 10</h4>
+
+<p>按照第14.4节中的过程设置接收队列并配置E1000。你不必支持大数据包或多播。目前，不要为卡配置中断。如果你决定使用接收中断，则可以稍后更改。同样，将E1000配置为剥离以太网CRC，因为脚本希望将其剥离。</p>
+
+<p>默认情况下，该卡将过滤掉所有数据包。你必须给网卡的Receive Address Registers配置MAC地址（RAL和RAH），才能接受发往该网卡的数据包。你可以简单地对QEMU的默认MAC地址<code class="language-plaintext highlighter-rouge">52:54:00:12:34:56</code>进行硬编码（我们已经在lwIP中对它进行了硬编码，因此在这里也不会使情况变得更糟）。字节顺序要特别小心； MAC地址是从最低字节到最高字节写入的，因此52:54:00:12是MAC地址的低32位，而34:56是高16位。</p>
+
+<p>E1000仅支持一组特定大小的接收缓冲区（在13.4.22中的<code class="language-plaintext highlighter-rouge">RCTL.BSIZE</code>中有描述）。如果确保接收数据包缓冲区足够大并禁用大数据包，则不必担心数据包跨越多个接收缓冲区。另外，请记住，就像发送一样，接收队列和数据包缓冲区必须是连续的物理内存。</p>
+
+<p>你应该至少使用128个接收描述符。</p>
+
+<p>和发送一样，需要初始化一些接口</p>
+
+<p><code class="language-plaintext highlighter-rouge">kern/e1000.c</code></p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// LAB 6: Your driver code here</span>
+<span class="kt">int</span> <span class="nf">attachfn_enable</span><span class="p">(</span><span class="k">struct</span> <span class="n">pci_func</span> <span class="o">*</span><span class="n">pcif</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pci_func_enable</span><span class="p">(</span><span class="n">pcif</span><span class="p">);</span>
+
+    <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">TXRING_LEN</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">){</span>
+        <span class="n">memset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tx_send</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">tx_send</span><span class="p">[</span><span class="n">i</span><span class="p">]));</span>
+        <span class="c1">//tx_d[i].addr = PADDR(&amp;(pbuf[i]));</span>
+        <span class="n">tx_send</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">status</span> <span class="o">=</span> <span class="n">TXD_STATUS_DD</span><span class="p">;</span>
+        <span class="n">tx_send</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">cmd</span> <span class="o">=</span> <span class="n">TXD_CMD_RS</span> <span class="o">|</span> <span class="n">TXD_CMD_EOP</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">bar_va</span> <span class="o">=</span> <span class="n">mmio_map_region</span><span class="p">(</span><span class="n">pcif</span><span class="o">-&gt;</span><span class="n">reg_base</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pcif</span><span class="o">-&gt;</span><span class="n">reg_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span> <span class="c1">//为reg_base分配内存</span>
+    <span class="kt">uint32_t</span> <span class="o">*</span><span class="n">status_reg</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="mh">0x8</span><span class="p">);</span> <span class="c1">//查看var_va的从偏移量8开始的值</span>
+    <span class="n">assert</span><span class="p">(</span><span class="o">*</span><span class="n">status_reg</span> <span class="o">==</span> <span class="mh">0x80080783</span><span class="p">);</span>
+
+    <span class="c1">// send</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDBAL</span><span class="p">)</span> <span class="o">=</span> <span class="n">PADDR</span><span class="p">(</span><span class="n">tx_send</span><span class="p">);</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDBAH</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDLEN</span><span class="p">)</span> <span class="o">=</span> <span class="n">TXRING_LEN</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">tx_desc</span><span class="p">);</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDH</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TDT</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">tctl</span> <span class="o">=</span> <span class="n">TCTL_EN</span> <span class="o">|</span> <span class="n">TCTL_PSP</span> <span class="o">|</span> <span class="p">(</span><span class="n">TCTL_CT</span> <span class="o">&amp;</span> <span class="p">(</span><span class="mh">0x10</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">))</span> <span class="o">|</span> <span class="p">(</span><span class="n">TCTL_COLD</span> <span class="o">&amp;</span> <span class="p">(</span><span class="mh">0x40</span> <span class="o">&lt;&lt;</span> <span class="mi">12</span><span class="p">));</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TCTL</span><span class="p">)</span> <span class="o">=</span> <span class="n">tctl</span><span class="p">;</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">TIPG</span><span class="p">)</span> <span class="o">=</span> <span class="mi">10</span> <span class="o">|</span> <span class="p">(</span><span class="mi">8</span> <span class="o">&lt;&lt;</span> <span class="mi">10</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="mi">12</span> <span class="o">&lt;&lt;</span> <span class="mi">20</span><span class="p">);</span>
+
+    <span class="c1">//receive</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">RAL</span><span class="p">)</span> <span class="o">=</span> <span class="mh">0x12005452</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">rah</span> <span class="o">=</span> <span class="mh">0x5634</span> <span class="o">|</span> <span class="p">(</span><span class="mi">1u</span> <span class="o">&lt;&lt;</span> <span class="mi">31</span><span class="p">);</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">RAH</span><span class="p">)</span> <span class="o">=</span> <span class="n">rah</span><span class="p">;</span>
+    <span class="k">for</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">void</span> <span class="o">*</span><span class="n">c</span> <span class="o">=</span> <span class="n">bar_va</span> <span class="o">+</span> <span class="n">MTA_START</span><span class="p">;</span> <span class="n">c</span> <span class="o">&lt;</span> <span class="n">bar_va</span> <span class="o">+</span> <span class="n">MTA_END</span><span class="p">;</span> <span class="o">++</span><span class="n">c</span><span class="p">)</span>
+        <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">char</span> <span class="o">*</span><span class="p">)</span> <span class="n">c</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>                                <span class="c1">// MTA</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">IMS</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>                   <span class="c1">// IMS</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">RDBAL</span><span class="p">)</span> <span class="o">=</span> <span class="n">PADDR</span><span class="p">(</span><span class="n">tx_receive</span><span class="p">);</span><span class="c1">// RDBAL</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">RDBAH</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>                <span class="c1">// RDBAH</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">RDLEN</span><span class="p">)</span> <span class="o">=</span> <span class="n">TX_RECV_ARRAY_LEN</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">tx_desc</span><span class="p">);</span><span class="c1">// RDLEN</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">RDH</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>                <span class="c1">// RDH</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">RDT</span><span class="p">)</span> <span class="o">=</span> <span class="n">TX_RECV_ARRAY_LEN</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span>       <span class="c1">// RDT</span>
+    <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">TX_RECV_ARRAY_LEN</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="k">struct</span> <span class="n">PageInfo</span> <span class="o">*</span><span class="n">pp</span> <span class="o">=</span> <span class="n">page_alloc</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+        <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">pp</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"fail to alloc memory for e1000 recv</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="n">tx_receive</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">addr</span> <span class="o">=</span> <span class="n">page2pa</span><span class="p">(</span><span class="n">pp</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="kt">uint32_t</span> <span class="n">rctl</span> <span class="o">=</span> <span class="p">(</span><span class="n">RCTL_EN</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">RCTL_BAM</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">RCTL_BSIZE</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">RCTL_BSEX</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">RCTL_SECRC</span><span class="p">);</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">RCTL</span><span class="p">)</span> <span class="o">=</span> <span class="n">rctl</span><span class="p">;</span>        <span class="c1">// RCTL</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>即使没有编写接收数据包的代码，也可以立即进行接收功能的基本测试。运行<code class="language-plaintext highlighter-rouge">make E1000_DEBUG=TX,TXERR,RX,RXERR,RXFILTER run-net_testinput-nox</code>。<code class="language-plaintext highlighter-rouge">testinput</code>将发送ARP（地址解析协议）通告数据包（使用你的数据包传输系统调用），QEMU会自动回复该消息。即使你的驱动程序尚未收到此答复，你也应该看到<code class="language-plaintext highlighter-rouge">e1000: unicast match[0]: 52:54:00:12:34:56</code>消息，表明E1000已接收到数据包并匹配到了一个以配置的接收过滤器。如果看到的是<code class="language-plaintext highlighter-rouge">e1000: unicast mismatch: 52:54:00:12:34:56</code>消息，则E1000会过滤掉数据包，这意味着你可能未正确配置RAL和RAH。确保正确设置了字节顺序，并且不要忘记在RAH中设置<code class="language-plaintext highlighter-rouge">Address Valid</code>位。如果没有收到任何<code class="language-plaintext highlighter-rouge">e1000</code>消息，则可能未正确启用接收功能。</p>
+
+<p>现在你已经准备好实现接收数据包。要接收数据包，驱动程序将必须跟踪它希望保存下一个接收到的数据包的描述符（提示：根据你的设计，E10​​00中可能已经有一个寄存器来跟踪此信息）。与发送类似，文档指出不能从软件中可靠地读取RDH寄存器，因此为了确定是否已将数据包传递到此描述符的数据包缓冲区，你必须读取描述符中的DD状态位。如果DD位置1，则可以从该描述符的数据包缓冲区中复制数据包数据，然后通过更新队列的尾部索引RDT告知网卡该描述符是空闲的。</p>
+
+<p>如果未设置DD位，则表示未收到任何数据包。这与发送队列已满时的接收端等效，在这种情况下，你可以执行一些操作。你可以简单地返回<code class="language-plaintext highlighter-rouge">try again</code>错误，并要求调用方重试。尽管此方法在整个传输队列中都很好，因为这是一个短暂的条件，但对于空的接收队列却没有多大用处，因为接收队列可能会长时间保持为空。第二种方法是暂停调用环境，直到接收队列中有要处理的包为止。此策略与<code class="language-plaintext highlighter-rouge">sys_ipc_recv</code>非常相似。就像在IPC中一样，由于每个CPU只有一个内核堆栈，因此一旦离开内核，堆栈上的状态就会丢失。我们需要设置一个标志，指示接收队列下溢已暂停环境并记录系统调用参数。这种方法的缺点是复杂性：必须指示E1000生成接收中断，而驱动程序必须处理这些中断，以恢复被阻塞的环境，等待数据包。</p>
+
+<h4 id="exercise-11">Exercise 11</h4>
+
+<p>编写一个函数以接收来自E1000的数据包，并通过添加系统调用将其提供给用户空间使用。确保处理接收队列为空。</p>
+
+<p><code class="language-plaintext highlighter-rouge">kern/e1000.c</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">try_receive</span><span class="p">(</span><span class="k">struct</span> <span class="n">jif_pkt</span> <span class="o">*</span><span class="n">jp</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">rdt</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">RDT</span><span class="p">);</span>
+    <span class="k">volatile</span> <span class="k">struct</span> <span class="n">tx_desc</span> <span class="o">*</span><span class="n">rd</span> <span class="o">=</span> <span class="n">tx_receive</span> <span class="o">+</span> <span class="p">(</span><span class="n">rdt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">TX_RECV_ARRAY_LEN</span><span class="p">;</span>
+    <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">rd</span><span class="o">-&gt;</span><span class="n">status</span> <span class="o">&amp;</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">pte_t</span> <span class="o">*</span><span class="n">pte</span><span class="p">;</span>
+    <span class="n">lcr3</span><span class="p">(</span><span class="n">PADDR</span><span class="p">(</span><span class="n">curenv</span><span class="o">-&gt;</span><span class="n">env_pgdir</span><span class="p">));</span>
+    <span class="n">jp</span><span class="o">-&gt;</span><span class="n">jp_len</span> <span class="o">=</span> <span class="n">rd</span><span class="o">-&gt;</span><span class="n">length</span><span class="p">;</span>
+    <span class="n">page_insert</span><span class="p">(</span><span class="n">curenv</span><span class="o">-&gt;</span><span class="n">env_pgdir</span><span class="p">,</span> <span class="n">pa2page</span><span class="p">(</span><span class="n">rd</span><span class="o">-&gt;</span><span class="n">addr</span><span class="p">),</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">PTE_P</span> <span class="o">|</span> <span class="n">PTE_W</span><span class="p">);</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">jp</span><span class="o">-&gt;</span><span class="n">jp_data</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">jp</span><span class="o">-&gt;</span><span class="n">jp_len</span><span class="p">);</span>
+    <span class="n">page_remove</span><span class="p">(</span><span class="n">curenv</span><span class="o">-&gt;</span><span class="n">env_pgdir</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="n">lcr3</span><span class="p">(</span><span class="n">PADDR</span><span class="p">(</span><span class="n">kern_pgdir</span><span class="p">));</span>
+    <span class="n">rdt</span> <span class="o">=</span> <span class="p">(</span><span class="n">rdt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">TX_RECV_ARRAY_LEN</span><span class="p">;</span>
+    <span class="o">*</span><span class="p">(</span><span class="k">volatile</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">bar_va</span> <span class="o">+</span> <span class="n">RDT</span><span class="p">)</span> <span class="o">=</span> <span class="n">rdt</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">kern/syscall.c</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span> <span class="nf">sys_packet_try_receive</span><span class="p">(</span><span class="k">struct</span> <span class="n">jif_pkt</span> <span class="o">*</span><span class="n">jp</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">user_mem_assert</span><span class="p">(</span><span class="n">curenv</span><span class="p">,</span> <span class="n">jp</span><span class="p">,</span> <span class="n">PGSIZE</span><span class="p">,</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_W</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">try_receive</span><span class="p">(</span><span class="n">jp</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>还需要在lib中要添加相应的函数调用这个系统调用，因为用户环境不能直接调用。</p>
+
+<h2 id="接收数据包网络服务器">接收数据包：网络服务器</h2>
+
+<p>在网络服务器输入环境中，你将需要使用新的接收系统调用来接收数据包，并使用<code class="language-plaintext highlighter-rouge">NSREQ_INPUT</code> IPC消息将其传递到核心网络服务器环境。这些IPC输入消息应在一个页面上，页面上带有<code class="language-plaintext highlighter-rouge">union Nsipc</code>，其<code class="language-plaintext highlighter-rouge">struct jif_pkt pkt</code>字段填充了从网络接收到的数据包。</p>
+
+<h3 id="exercise-12">Exercise 12</h3>
+
+<p>实现<code class="language-plaintext highlighter-rouge">net/input.c</code>。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span>
+<span class="nf">input</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">ns_envid</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">binaryname</span> <span class="o">=</span> <span class="s">"ns_input"</span><span class="p">;</span>
+
+    <span class="c1">// LAB 6: Your code here:</span>
+    <span class="c1">//  - read a packet from the device driver</span>
+    <span class="c1">//  - send it to the network server</span>
+    <span class="c1">// Hint: When you IPC a page to the network server, it will be</span>
+    <span class="c1">// reading from it for a while, so don't immediately receive</span>
+    <span class="c1">// another packet in to the same physical page.</span>
+    <span class="k">static</span> <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">PGSIZE</span> <span class="o">*</span> <span class="mi">2</span><span class="p">]</span> <span class="n">__attribute__</span><span class="p">((</span><span class="n">aligned</span><span class="p">(</span><span class="n">PGSIZE</span><span class="p">)));</span>
+    <span class="k">static</span> <span class="k">struct</span> <span class="n">jif_pkt</span> <span class="o">*</span><span class="n">pkt</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">jif_pkt</span> <span class="o">*</span><span class="p">)</span> <span class="n">buf</span><span class="p">;</span>
+    <span class="k">static</span> <span class="k">struct</span> <span class="n">jif_pkt</span> <span class="o">*</span><span class="n">pkt2</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">jif_pkt</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">buf</span> <span class="o">+</span> <span class="n">PGSIZE</span><span class="p">);</span>
+    <span class="n">memset</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buf</span><span class="p">));</span>
+    <span class="k">for</span><span class="p">(;;)</span>
+    <span class="p">{</span>
+        <span class="n">sys_yield</span><span class="p">();</span>
+        <span class="k">if</span><span class="p">(</span><span class="n">sys_packet_try_receive</span><span class="p">(</span><span class="n">pkt</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">continue</span><span class="p">;</span>
+        <span class="n">ipc_send</span><span class="p">(</span><span class="n">ns_envid</span><span class="p">,</span> <span class="n">NSREQ_INPUT</span><span class="p">,</span> <span class="n">pkt</span><span class="p">,</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">);</span>
+        <span class="k">struct</span> <span class="n">jif_pkt</span> <span class="o">*</span><span class="n">t</span> <span class="o">=</span> <span class="n">pkt</span><span class="p">;</span> <span class="n">pkt</span> <span class="o">=</span> <span class="n">pkt2</span><span class="p">;</span> <span class="n">pkt2</span> <span class="o">=</span> <span class="n">t</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>使用<code class="language-plaintext highlighter-rouge">make E1000_DEBUG=TX,TXERR,RX,RXERR,RXFILTER run-net_testinput-nox</code>运行testinput。你应该看到</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Sending ARP announcement...
+Waiting <span class="k">for </span>packets...
+e1000: index 0: 0x26dea0 : 900002a 0
+e1000: unicast match[0]: 52:54:00:12:34:56
+input: 0000   5254 0012 3456 5255  0a00 0202 0806 0001
+input: 0010   0800 0604 0002 5255  0a00 0202 0a00 0202
+input: 0020   5254 0012 3456 0a00  020f 0000 0000 0000
+input: 0030   0000 0000 0000 0000  0000 0000 0000 0000
+</code></pre></div></div>
+
+<p>以<code class="language-plaintext highlighter-rouge">input:</code>开头的行是QEMU ARP应答的十六进制显示。</p>
+
+<p>你的代码应通过<code class="language-plaintext highlighter-rouge">make grade</code>的<code class="language-plaintext highlighter-rouge">testinput</code>测试。请注意，如果没有发送一个ARP数据包以通知QEMU JOS的IP地址，就无法测试数据包的接收，因此，传输中的错误会导致该测试失败。</p>
+
+<p>为了更彻底地测试你的代码，我们提供了一个名为<code class="language-plaintext highlighter-rouge">echosrv</code>的守护程序，该守护程序在端口7上运行了回送服务器，该服务器将回送通过TCP连接发送的所有内容。使用<code class="language-plaintext highlighter-rouge">make E1000_DEBUG=TX,TXERR,RX,RXERR,RXFILTER run-echosrv-nox</code>在一个终端中启动回送服务器，在另一个终端中使用<code class="language-plaintext highlighter-rouge">make nc-7</code>与之连接。服务器应回送你输入的每一行。每次模拟的E1000收到数据包时，QEMU都应在控制台上打印以下内容：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>e1000: unicast match[0]: 52:54:00:12:34:56
+e1000: index 2: 0x26ea7c : 9000036 0
+e1000: index 3: 0x26f06a : 9000039 0
+e1000: unicast match[0]: 52:54:00:12:34:56
+</code></pre></div></div>
+
+<p>此时，你还应该能够通过<code class="language-plaintext highlighter-rouge">echosrv</code>测试。</p>
+
+<h3 id="question-2">Question 2</h3>
+
+<p>你如何构造接收实现？特别是，如果接收队列为空并且用户环境请求下一个传入数据包，该怎么办？</p>
+
+<h2 id="web服务器">Web服务器</h2>
+
+<p>最简单形式的Web服务器，将文件内容发送到发出请求的客户端。我们在<code class="language-plaintext highlighter-rouge">user/httpd.c</code>中提供了一个非常简单的Web服务器的框架代码。框架代码将处理传入的连接并解析标头。</p>
+
+<h3 id="exercise-13">Exercise 13</h3>
+
+<p>Web服务器缺少用于将文件内容发送回客户端的代码。通过实现<code class="language-plaintext highlighter-rouge">send_file</code>和<code class="language-plaintext highlighter-rouge">send_data</code>完成Web服务器。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span>
+<span class="nf">send_data</span><span class="p">(</span><span class="k">struct</span> <span class="n">http_request</span> <span class="o">*</span><span class="n">req</span><span class="p">,</span> <span class="kt">int</span> <span class="n">fd</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 6: Your code here.</span>
+    <span class="c1">//panic("send_data not implemented");</span>
+
+    <span class="k">static</span> <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">PGSIZE</span><span class="p">];</span>
+    <span class="kt">int</span> <span class="n">n</span><span class="p">,</span> <span class="n">r</span><span class="p">;</span>
+
+    <span class="k">while</span> <span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buf</span><span class="p">)))</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">write</span><span class="p">(</span><span class="n">req</span><span class="o">-&gt;</span><span class="n">sock</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span> <span class="o">!=</span> <span class="n">n</span><span class="p">)</span>
+            <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">user/httpd.c send_file</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">req</span><span class="o">-&gt;</span><span class="n">url</span><span class="p">,</span> <span class="n">O_RDONLY</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">send_error</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="mi">404</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">end</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">struct</span> <span class="n">Stat</span> <span class="n">stat</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">fstat</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">stat</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">send_error</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="mi">404</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">end</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">stat</span><span class="p">.</span><span class="n">st_isdir</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">send_error</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="mi">404</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">end</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">file_size</span> <span class="o">=</span> <span class="n">stat</span><span class="p">.</span><span class="n">st_size</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>完成Web服务器后，启动Web服务器（执行<code class="language-plaintext highlighter-rouge">make run-httpd-nox</code>），然后将你喜欢的浏览器指向<code class="language-plaintext highlighter-rouge">http://host:port/index.html</code>，其中host是运行QEMU的计算机的名称，port是通过<code class="language-plaintext highlighter-rouge">make which-ports</code>报告的端口号。你应该能够看到一个网页传输有点慢，请耐心等待。</p>
+:ET

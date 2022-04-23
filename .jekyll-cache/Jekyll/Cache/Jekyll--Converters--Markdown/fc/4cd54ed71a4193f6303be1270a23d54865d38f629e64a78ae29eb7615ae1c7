@@ -1,0 +1,34 @@
+I"	<p>题解:</p>
+
+<p>该题可以转行成判断是否有环并返回第一个环节点</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="nc">ListNode</span> <span class="nf">getIntersectionNode</span><span class="o">(</span><span class="nc">ListNode</span> <span class="n">headA</span><span class="o">,</span> <span class="nc">ListNode</span> <span class="n">headB</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">if</span><span class="o">(</span><span class="n">headA</span> <span class="o">==</span> <span class="kc">null</span> <span class="o">||</span> <span class="n">headB</span> <span class="o">==</span> <span class="kc">null</span><span class="o">)</span>
+        <span class="k">return</span> <span class="kc">null</span><span class="o">;</span>
+
+    <span class="nc">ListNode</span> <span class="n">node</span> <span class="o">=</span> <span class="n">headA</span><span class="o">;</span>
+    <span class="k">while</span> <span class="o">(</span><span class="n">node</span><span class="o">.</span><span class="na">next</span> <span class="o">!=</span> <span class="kc">null</span><span class="o">)</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="na">next</span><span class="o">;</span>
+
+    <span class="n">node</span><span class="o">.</span><span class="na">next</span> <span class="o">=</span> <span class="n">headB</span><span class="o">;</span>
+
+    <span class="nc">ListNode</span> <span class="n">slow</span> <span class="o">=</span> <span class="n">headA</span><span class="o">;</span>
+    <span class="nc">ListNode</span> <span class="n">fast</span> <span class="o">=</span> <span class="n">headA</span><span class="o">;</span>
+    <span class="k">while</span> <span class="o">(</span><span class="n">fast</span> <span class="o">!=</span> <span class="kc">null</span> <span class="o">&amp;&amp;</span> <span class="n">fast</span><span class="o">.</span><span class="na">next</span> <span class="o">!=</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+        <span class="n">slow</span> <span class="o">=</span> <span class="n">slow</span><span class="o">.</span><span class="na">next</span><span class="o">;</span>
+        <span class="n">fast</span> <span class="o">=</span> <span class="n">fast</span><span class="o">.</span><span class="na">next</span><span class="o">.</span><span class="na">next</span><span class="o">;</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">slow</span> <span class="o">==</span> <span class="n">fast</span><span class="o">)</span> <span class="o">{</span>
+            <span class="n">slow</span> <span class="o">=</span> <span class="n">headA</span><span class="o">;</span>
+            <span class="k">while</span> <span class="o">(</span><span class="n">slow</span> <span class="o">!=</span> <span class="n">fast</span><span class="o">)</span> <span class="o">{</span>
+                <span class="n">slow</span> <span class="o">=</span> <span class="n">slow</span><span class="o">.</span><span class="na">next</span><span class="o">;</span>
+                <span class="n">fast</span> <span class="o">=</span> <span class="n">fast</span><span class="o">.</span><span class="na">next</span><span class="o">;</span>
+            <span class="o">}</span>
+            <span class="n">node</span><span class="o">.</span><span class="na">next</span> <span class="o">=</span> <span class="kc">null</span><span class="o">;</span>
+            <span class="k">return</span> <span class="n">fast</span><span class="o">;</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+    <span class="n">node</span><span class="o">.</span><span class="na">next</span> <span class="o">=</span> <span class="kc">null</span><span class="o">;</span>
+    <span class="k">return</span> <span class="kc">null</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+:ET

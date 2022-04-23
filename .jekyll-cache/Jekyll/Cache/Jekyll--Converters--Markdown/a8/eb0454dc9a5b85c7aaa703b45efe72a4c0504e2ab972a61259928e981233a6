@@ -1,0 +1,512 @@
+I"Nq<p>mysql官方测试库,<a href="https://github.com/datacharmer/test_db">点我</a></p>
+
+<h3 id="修改密码">修改密码</h3>
+
+<p><code class="language-plaintext highlighter-rouge">mysqladmin -u root -p password 123</code></p>
+
+<p>这条命令可以为用户设置密码,root位置为用户名,<code class="language-plaintext highlighter-rouge">123</code> 位置为密码,password不用改</p>
+
+<h3 id="用户">用户</h3>
+
+<p><code class="language-plaintext highlighter-rouge">create user hw@'%' identified by '123456'</code></p>
+
+<ul>
+  <li>
+    <p>hw 为用户名</p>
+  </li>
+  <li>
+    <p>% 可以访问的ip地址(% 代表所以ip地址)</p>
+  </li>
+  <li>
+    <p>123456 为密码</p>
+  </li>
+</ul>
+
+<p><code class="language-plaintext highlighter-rouge">select user, host from mysql.user;</code> 可以查询用户创建成功没</p>
+
+<p><code class="language-plaintext highlighter-rouge">alter user hw@'%' identified by '123456'</code> 可以修改密码</p>
+
+<p><code class="language-plaintext highlighter-rouge">drop user hw@'%';</code> 删除用户</p>
+
+<h3 id="权限">权限</h3>
+
+<p><code class="language-plaintext highlighter-rouge">grant all on *.* to root@'%' identified by 'password'</code></p>
+
+<ul>
+  <li>
+    <p>all 代表所有权限,可以换成<code class="language-plaintext highlighter-rouge">select</code>等</p>
+  </li>
+  <li>
+    <p>第一个* 是数据库名称，可以改成允许访问的数据库名称</p>
+  </li>
+  <li>
+    <p>第二个* 是数据库的表名称(*代表允许访问任意的表和数据库)</p>
+  </li>
+  <li>
+    <p>root代表远程登录使用的用户名，可以自定义</p>
+  </li>
+  <li>
+    <p>% 代表允许任意ip登录，如果你想指定特定的IP，替换掉就可以</p>
+  </li>
+  <li>
+    <p>password 是运程连接密码</p>
+  </li>
+  <li>
+    <p><code class="language-plaintext highlighter-rouge">with grant option</code>命令可以加在后面,这只有root用户可以使用</p>
+  </li>
+</ul>
+
+<p><code class="language-plaintext highlighter-rouge">show grants for root;</code> 查看用户权限</p>
+
+<p><code class="language-plaintext highlighter-rouge">revoke delete on *.* from root@'%'</code> 回收delete权限</p>
+
+<h3 id="管理员忘记root用户密码">管理员忘记root用户密码</h3>
+
+<p><code class="language-plaintext highlighter-rouge">mysqld_safe --skip-grant-tables --skip-networking &amp;</code></p>
+
+<p>关闭连接层和tcp/ip连接</p>
+
+<p><code class="language-plaintext highlighter-rouge">flush privileges;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">alter user root@'%' identified by "123456";</code></p>
+
+<h3 id="database">DATABASE</h3>
+
+<p><code class="language-plaintext highlighter-rouge">create database hw CHARSET utf8mb4 collate utf8mb4_bin;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">alter database hw charset utf8;</code></p>
+
+<h3 id="表">表</h3>
+
+<p><code class="language-plaintext highlighter-rouge">desc 表名</code> 查看表的结构</p>
+
+<p><code class="language-plaintext highlighter-rouge">create table test like stu;</code> 创建一个和stu一样的表</p>
+
+<h3 id="show-命令">show 命令</h3>
+
+<p><code class="language-plaintext highlighter-rouge">show tables;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show databases;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show charset;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show collation;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show engine;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show processlist;</code> 查看连接线程</p>
+
+<p><code class="language-plaintext highlighter-rouge">show variables;</code> 查看my.cnf可以设置的参数</p>
+
+<p><code class="language-plaintext highlighter-rouge">show variables like'%log%';</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show status;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show status like '%lock%';</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show index from employees.salaries;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show engine innodb status \G;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show binary logs;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show binlog events in 'xxx';</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show master status;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show slave status \G;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show grant for root@'%';</code></p>
+
+<h4 id="表的修改">表的修改</h4>
+
+<p>添加 <code class="language-plaintext highlighter-rouge">alter table stu ADD qq varchar(20) NOT NULL UNIQUE comment "qq号";</code></p>
+
+<p>指定位置添加 :</p>
+
+<p><code class="language-plaintext highlighter-rouge">alter table stu ADD wechat varchar(20) NOT NULL UNIQUE AFTER sname COMMENT "微信";</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">alter table stu ADD num INT NOT null FIRST;</code></p>
+
+<p>删除列 <code class="language-plaintext highlighter-rouge">alter table stu DROP qq;</code></p>
+
+<p>修改列的属性 <code class="language-plaintext highlighter-rouge">alter table stu MODIFY sname varchar(12) NOT NULL;</code></p>
+
+<p>修改列sgender为sg以及属性 <code class="language-plaintext highlighter-rouge">alter table stu change sgender sg char(1) NOT NULL;</code></p>
+
+<p>添加主键 <code class="language-plaintext highlighter-rouge">alter table stu add primery key(id);</code></p>
+
+<p>更改表名 <code class="language-plaintext highlighter-rouge">alter table stu rename to 666;</code></p>
+
+<p>删除索引 <code class="language-plaintext highlighter-rouge">alter table stu drop index username;</code></p>
+
+<p>添加索引 <code class="language-plaintext highlighter-rouge">alter table stu add unique key(username);</code></p>
+
+<h3 id="启动读文件">启动读文件</h3>
+
+<p><code class="language-plaintext highlighter-rouge">mysqld --help --verbose | grep my.cnf</code></p>
+
+<p>可以查看读取的文件</p>
+
+<h3 id="查看支持字符集">查看支持字符集</h3>
+
+<p><code class="language-plaintext highlighter-rouge">show charset;</code></p>
+
+<h3 id="查看校对规则">查看校对规则</h3>
+
+<p><code class="language-plaintext highlighter-rouge">show collation;</code></p>
+
+<h3 id="insert">insert</h3>
+
+<p><code class="language-plaintext highlighter-rouge">INSERT INTO stu(sname,sage,sgender,sfz,intime) VALUES('hw',20,'f','123456',NOW());</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">insert into stu(sname) select sname from stu;</code></p>
+
+<p>同时录入多行数据</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">INSERT</span> <span class="k">INTO</span> <span class="n">stu</span><span class="p">(</span><span class="n">sname</span><span class="p">,</span><span class="n">sage</span><span class="p">,</span><span class="n">sgender</span><span class="p">,</span><span class="n">sfz</span><span class="p">)</span>
+<span class="k">VALUES</span>
+<span class="p">(</span><span class="s1">'hwe'</span><span class="p">,</span><span class="mi">20</span><span class="p">,</span><span class="s1">'f'</span><span class="p">,</span><span class="s1">'123456fe'</span><span class="p">),</span>
+<span class="p">(</span><span class="s1">'fe'</span><span class="p">,</span><span class="mi">43</span><span class="p">,</span><span class="s1">'m'</span><span class="p">,</span><span class="s1">'23'</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h3 id="update">update</h3>
+
+<p><code class="language-plaintext highlighter-rouge">UPDATE stu SET sname='zhao4' WHERE id=2;</code> 修改id=2的sname为zhao4</p>
+
+<p>注意:一定要添加条件</p>
+
+<h3 id="delete">delete</h3>
+
+<p><code class="language-plaintext highlighter-rouge">DELETE FROM stu WHERE id=3;</code> delete 命令只是对信息标注不可见,不释放空间</p>
+
+<p><code class="language-plaintext highlighter-rouge">TRUNCATE TABLE stu;</code></p>
+
+<h3 id="select">select</h3>
+
+<p>顺序:</p>
+
+<p>select</p>
+
+<p>from</p>
+
+<p>where</p>
+
+<p>group by</p>
+
+<p>having</p>
+
+<p>order by</p>
+
+<p>limit</p>
+
+<p>使用<code class="language-plaintext highlighter-rouge">&lt;=&gt;NULL</code>来检测null值</p>
+
+<h4 id="select-xxx-查看系统参数">select @@xxx 查看系统参数</h4>
+
+<p><code class="language-plaintext highlighter-rouge">select @@port;</code> 查看端口</p>
+
+<p><code class="language-plaintext highlighter-rouge">select @@basedir;</code> 查看目录</p>
+
+<p><code class="language-plaintext highlighter-rouge">select @@datadir;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">select @@socket;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">select @@server_id;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">select @@log_error;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">select @@log_bin_basename;</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">show variables like 'innodb%';</code></p>
+
+<h4 id="select函数">select()函数</h4>
+
+<p><code class="language-plaintext highlighter-rouge">select NOW();</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">select DATABASE();</code></p>
+
+<p>user() 当前用户</p>
+
+<p>concat() 拼接字符串</p>
+
+<p>group_concat() 一行显示</p>
+
+<h4 id="单表子句-where">单表子句-where</h4>
+
+<h5 id="where-等值查询">where 等值查询</h5>
+
+<p><code class="language-plaintext highlighter-rouge">select * from city where country='china';</code></p>
+
+<h5 id="where-比较操作符">where 比较操作符</h5>
+
+<p><code class="language-plaintext highlighter-rouge">select * from city where population&lt;100;</code></p>
+
+<h5 id="where-逻辑运算符and-or">where 逻辑运算符(and, or)</h5>
+
+<p><code class="language-plaintext highlighter-rouge">select * from city where countrycode='CHN' AND population&gt;500000;</code></p>
+
+<h5 id="where-模糊查询">where 模糊查询</h5>
+
+<p><code class="language-plaintext highlighter-rouge">%</code> 代表任意长度的字符</p>
+
+<p><code class="language-plaintext highlighter-rouge">_</code> 代表一个字符</p>
+
+<p><code class="language-plaintext highlighter-rouge">select * from city where district LIKE 'guang%';</code></p>
+
+<h5 id="where-in子句">where in子句</h5>
+
+<p><code class="language-plaintext highlighter-rouge">select * from city where countrycode IN ('CHN', 'USA');</code> 和or功能相似</p>
+
+<h5 id="where-between-and">where between and</h5>
+
+<p><code class="language-plaintext highlighter-rouge">select * from city where population&gt; 1000000 and population&lt;2000000;</code> =
+<code class="language-plaintext highlighter-rouge">select * from city where population BETWEEN 1000000 and 2000000;</code></p>
+
+<h4 id="单表子句-group-by">单表子句-group by</h4>
+
+<p>聚合函数: max(),min()</p>
+
+<p>avg() 平均数</p>
+
+<p>sum() 总和</p>
+
+<p>count() 个数</p>
+
+<p>group_concat() 列转行</p>
+
+<p><code class="language-plaintext highlighter-rouge">select countrycode,SUM(population) from city group by countrycode;</code></p>
+
+<h4 id="单表子句-having">单表子句-having</h4>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="n">district</span><span class="p">,</span><span class="k">SUM</span><span class="p">(</span><span class="n">population</span><span class="p">)</span>
+<span class="k">from</span> <span class="n">city</span>
+<span class="k">where</span> <span class="n">countrycode</span><span class="o">=</span><span class="s1">'chn'</span>
+<span class="k">group</span> <span class="k">by</span> <span class="n">district</span>
+<span class="k">having</span> <span class="k">sum</span><span class="p">(</span><span class="n">population</span><span class="p">)</span><span class="o">&lt;</span><span class="mi">1000000</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h4 id="单表子句-order-by">单表子句-order by</h4>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">city</span>
+<span class="k">where</span> <span class="n">countrycode</span><span class="o">=</span><span class="s1">'chn'</span>
+<span class="k">order</span> <span class="k">by</span> <span class="n">population</span> <span class="k">DESC</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>DESC 降序(从大到小)</p>
+
+<p>ASC 从小到大</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="n">district</span><span class="p">,</span><span class="k">sum</span><span class="p">(</span><span class="n">population</span><span class="p">)</span> <span class="k">from</span> <span class="n">city</span>
+<span class="k">where</span> <span class="n">coutrycode</span><span class="o">=</span><span class="s1">'chn'</span>
+<span class="k">group</span> <span class="k">by</span> <span class="n">district</span>
+<span class="k">having</span> <span class="k">sum</span><span class="p">(</span><span class="n">population</span><span class="p">)</span><span class="o">&gt;</span><span class="mi">500000</span>
+<span class="k">order</span> <span class="k">by</span> <span class="k">sum</span><span class="p">(</span><span class="n">population</span><span class="p">)</span> <span class="k">DESC</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h4 id="单表子句-limit">单表子句-limit</h4>
+
+<p>前3名</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="n">district</span><span class="p">,</span><span class="k">sum</span><span class="p">(</span><span class="n">population</span><span class="p">)</span> <span class="k">from</span> <span class="n">city</span>
+<span class="k">where</span> <span class="n">coutrycode</span><span class="o">=</span><span class="s1">'chn'</span>
+<span class="k">group</span> <span class="k">by</span> <span class="n">district</span>
+<span class="k">having</span> <span class="k">sum</span><span class="p">(</span><span class="n">population</span><span class="p">)</span><span class="o">&gt;</span><span class="mi">500000</span>
+<span class="k">order</span> <span class="k">by</span> <span class="k">sum</span><span class="p">(</span><span class="n">population</span><span class="p">)</span> <span class="k">DESC</span>
+<span class="k">limit</span> <span class="mi">3</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>n 代表开始位置</p>
+
+<p>m 代表显示数量</p>
+
+<p>limit n,m</p>
+
+<p>limit m offset n</p>
+
+<h4 id="单表子句-distinct">单表子句-distinct</h4>
+
+<p><code class="language-plaintext highlighter-rouge">select distinct(countrycode) from city;</code></p>
+
+<h3 id="子查询">子查询</h3>
+
+<h4 id="in">IN</h4>
+
+<p>案例:</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">emp</span>
+<span class="k">where</span> <span class="n">depId</span> <span class="k">IN</span> <span class="p">(</span><span class="k">select</span> <span class="n">id</span> <span class="k">from</span> <span class="n">dep</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>NOT IN</p>
+
+<h4 id="exists">EXISTS</h4>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">emp</span>
+<span class="k">where</span> <span class="k">EXISTS</span> <span class="p">(</span><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">emp</span> <span class="k">where</span> <span class="n">id</span><span class="o">=</span><span class="mi">1</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h3 id="联合查询--union-all">联合查询- union all</h3>
+
+<p><code class="language-plaintext highlighter-rouge">select * from employee</code> =</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">employee</span> <span class="k">where</span> <span class="n">gender</span><span class="o">=</span><span class="s1">'M'</span>
+<span class="k">union</span> <span class="k">all</span>
+<span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">employee</span> <span class="k">where</span> <span class="n">gender</span><span class="o">=</span><span class="s1">'F'</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>一般情况下,会将 <code class="language-plaintext highlighter-rouge">IN</code>和 <code class="language-plaintext highlighter-rouge">OR</code> 语句改写成<code class="language-plaintext highlighter-rouge">UNION ALL</code>,来提高性能</p>
+
+<p><code class="language-plaintext highlighter-rouge">union</code> 去重复</p>
+
+<p><code class="language-plaintext highlighter-rouge">union all</code> 不去重复</p>
+
+<h3 id="多表连接">多表连接</h3>
+
+<p>查询员工和它的薪水的前100名</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="n">employees</span><span class="p">.</span><span class="n">emp_no</span><span class="p">,</span><span class="n">salaries</span><span class="p">.</span><span class="n">salary</span> <span class="k">from</span>
+<span class="n">employees</span> <span class="k">join</span> <span class="n">salaries</span>
+<span class="k">on</span> <span class="n">employees</span><span class="p">.</span><span class="n">emp_no</span><span class="o">=</span><span class="n">salaries</span><span class="p">.</span><span class="n">emp_no</span>
+<span class="k">order</span> <span class="k">by</span> <span class="n">salaries</span><span class="p">.</span><span class="n">salary</span> <span class="k">desc</span>
+<span class="k">limit</span> <span class="mi">100</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>as 起别名</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span>
+<span class="n">a</span><span class="p">.</span><span class="n">emp_no</span> <span class="k">AS</span> <span class="n">id</span><span class="p">,</span>
+<span class="n">b</span><span class="p">.</span><span class="n">salary</span> <span class="k">AS</span> <span class="n">salary</span>
+<span class="k">from</span> <span class="n">employees</span> <span class="k">AS</span> <span class="n">a</span> <span class="k">join</span> <span class="n">salaries</span> <span class="k">AS</span> <span class="n">b</span>
+<span class="k">on</span> <span class="n">a</span><span class="p">.</span><span class="n">emp_no</span><span class="o">=</span><span class="n">b</span><span class="p">.</span><span class="n">emp_no</span>
+<span class="k">order</span> <span class="k">by</span> <span class="n">b</span><span class="p">.</span><span class="n">salary</span> <span class="k">desc</span>
+<span class="k">limit</span> <span class="mi">100</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>列别名只在显示时起作用</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="n">a</span><span class="p">.</span><span class="n">oo</span><span class="p">,</span> <span class="k">c</span><span class="p">.</span><span class="n">pp</span>
+<span class="k">from</span> <span class="n">a</span>
+<span class="k">join</span> <span class="n">b</span>
+<span class="k">on</span> <span class="n">a</span><span class="p">.</span><span class="n">xx</span><span class="o">=</span><span class="n">b</span><span class="p">.</span><span class="n">xx</span>
+<span class="k">join</span> <span class="k">c</span>
+<span class="n">b</span><span class="p">.</span><span class="n">ii</span><span class="o">=</span><span class="k">c</span><span class="p">.</span><span class="n">ii</span>
+<span class="k">where</span> <span class="n">a</span><span class="p">.</span><span class="n">fs</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h3 id="information_schema-视图库虚拟库">information_schema 视图库(虚拟库)</h3>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">create</span> <span class="k">view</span> <span class="n">hw</span> <span class="k">as</span>
+<span class="k">select</span>
+<span class="n">a</span><span class="p">.</span><span class="n">emp_no</span> <span class="k">AS</span> <span class="n">id</span><span class="p">,</span>
+<span class="n">b</span><span class="p">.</span><span class="n">salary</span> <span class="k">AS</span> <span class="n">salary</span>
+<span class="k">from</span> <span class="n">employees</span> <span class="k">AS</span> <span class="n">a</span> <span class="k">join</span> <span class="n">salaries</span> <span class="k">AS</span> <span class="n">b</span>
+<span class="k">on</span> <span class="n">a</span><span class="p">.</span><span class="n">emp_no</span><span class="o">=</span><span class="n">b</span><span class="p">.</span><span class="n">emp_no</span>
+<span class="k">order</span> <span class="k">by</span> <span class="n">b</span><span class="p">.</span><span class="n">salary</span> <span class="k">desc</span>
+<span class="k">limit</span> <span class="mi">100</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>tables表,存储表的属性</p>
+
+<p>TABLE_SCHEMA 库名</p>
+
+<p>TABLE_NAME 表名</p>
+
+<p>ENGINE 引擎</p>
+
+<p>TABLE_ROWS 表的行数</p>
+
+<p>AVG_ROW_LENGTH 表中行的平均行(字节)</p>
+
+<p>INDEX_LENGTH 索引的占用空间大小(字节)</p>
+
+<ol>
+  <li>查询整个数据库中所有库和所对应的表信息</li>
+</ol>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="n">TABLE_SCHEMA</span><span class="p">,</span><span class="n">GROUP_CONCAT</span><span class="p">(</span><span class="k">TABLE_NAME</span><span class="p">)</span>
+<span class="k">FROM</span> <span class="n">information_schema</span><span class="p">.</span><span class="n">TABLES</span>
+<span class="k">GROUP</span> <span class="k">BY</span> <span class="n">TABLE_SCHEMA</span><span class="p">;</span>
+</code></pre></div></div>
+
+<ol>
+  <li>统计所有库下的表个数</li>
+</ol>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="n">TABLE_SCHEMA</span><span class="p">,</span><span class="k">COUNT</span><span class="p">(</span><span class="k">TABLE_NAME</span><span class="p">)</span>
+<span class="k">FROM</span> <span class="n">information_schema</span><span class="p">.</span><span class="n">TABLES</span>
+<span class="k">GROUP</span> <span class="k">BY</span> <span class="n">TABLE_SCHEMA</span><span class="p">;</span>
+</code></pre></div></div>
+
+<ol>
+  <li>查询所有innodb引擎的表及所在的库</li>
+</ol>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">SELECT</span> <span class="n">table_schema</span><span class="p">,</span><span class="k">table_name</span><span class="p">,</span><span class="n">ENGING</span>
+<span class="k">FROM</span> <span class="n">information_schema</span><span class="p">.</span><span class="n">tables</span>
+<span class="k">WHERE</span> <span class="n">ENGINE</span><span class="o">=</span><span class="s1">'innodb'</span><span class="p">;</span>
+</code></pre></div></div>
+
+<ol>
+  <li>统计某个数据库下每张表的磁盘空间占用</li>
+</ol>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="n">table_schema</span><span class="p">,</span><span class="k">table_name</span><span class="p">,</span><span class="n">table_rows</span><span class="o">*</span><span class="n">AVG_ROW_LENGTH</span><span class="o">+</span><span class="n">INDEX_LENGTH</span>
+<span class="k">FROM</span> <span class="n">information_schema</span><span class="p">.</span><span class="n">tables</span>
+<span class="k">WHERE</span> <span class="n">TABLE_SCHEAM</span><span class="o">=</span><span class="s1">'hw'</span><span class="p">;</span>
+</code></pre></div></div>
+
+<ol>
+  <li>统计所有数据库的总的磁盘空间占用</li>
+</ol>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="k">sum</span><span class="p">(</span><span class="n">table_rows</span><span class="o">*</span><span class="n">avg_row_length</span><span class="o">+</span><span class="n">index_length</span><span class="p">)</span><span class="o">/</span><span class="mi">1024</span>
+<span class="k">from</span> <span class="n">information_scheam</span><span class="p">.</span><span class="n">tables</span><span class="p">;</span>
+</code></pre></div></div>
+
+<ol>
+  <li>生成整个数据库下的所有表的单独备份语句</li>
+</ol>
+
+<p>格式:</p>
+
+<p><code class="language-plaintext highlighter-rouge">mysqldump -u root -p123 employees salaries &gt; ~/sql/employees_salaries.sql</code></p>
+
+<p>语句拼接:</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="n">concat</span><span class="p">(</span><span class="nv">"mysqldump -u root -p123 "</span><span class="p">,</span><span class="n">table_schema</span><span class="p">,</span><span class="nv">" "</span><span class="p">,</span><span class="k">table_name</span><span class="p">,</span><span class="nv">" &gt;~/"</span><span class="p">,</span><span class="n">table_schema</span><span class="p">,</span><span class="nv">"_"</span><span class="p">,</span><span class="k">table_name</span><span class="p">,</span><span class="nv">".sql"</span><span class="p">)</span>
+<span class="k">from</span> <span class="n">information_schema</span><span class="p">.</span><span class="n">tables</span>
+<span class="k">where</span> <span class="n">table_schema</span><span class="o">=</span><span class="s1">'employees'</span>
+<span class="k">into</span> <span class="n">outfile</span> <span class="s1">'/tmp/discard.sql'</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">into outfile</code>命令需要在<code class="language-plaintext highlighter-rouge">/etc/my.cnf</code>设置安全路径<code class="language-plaintext highlighter-rouge">secure-file-priv=/tmp</code></p>
+
+<ol>
+  <li>107张表,都需要执行以下2条语句</li>
+</ol>
+
+<p>格式: <code class="language-plaintext highlighter-rouge">alter table employees.salaries discard tablespace;</code></p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span> <span class="n">concat</span><span class="p">(</span><span class="nv">"alter table "</span><span class="p">,</span> <span class="n">table_schema</span><span class="p">,</span><span class="nv">"."</span><span class="p">,</span><span class="k">table_name</span><span class="p">,</span><span class="nv">" discard tablespace;"</span><span class="p">)</span>
+<span class="k">from</span> <span class="n">information_scheam</span><span class="p">.</span><span class="n">tables</span>
+<span class="k">where</span> <span class="n">table_schema</span><span class="o">=</span><span class="s1">'employees'</span>
+<span class="k">into</span> <span class="n">outfile</span> <span class="s1">'/tmp/discard.sql'</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h3 id="外键">外键</h3>
+
+<p><code class="language-plaintext highlighter-rouge">[CONSTRINT 外键名称] foreign key(字段名称) references 主表(字段名称)</code></p>
+
+<h3 id="事务">事务</h3>
+
+<p>开启事务: <code class="language-plaintext highlighter-rouge">start transaction;</code></p>
+
+<p>提交事务: <code class="language-plaintext highlighter-rouge">commit;</code></p>
+
+<p>回滚: <code class="language-plaintext highlighter-rouge">rollback;</code></p>
+
+<p>查看事务默认提交方式: <code class="language-plaintext highlighter-rouge">select @@autocommit;</code></p>
+
+<p>修改事务默认提交方式: <code class="language-plaintext highlighter-rouge">set @@autocommit = 0;</code></p>
+:ET

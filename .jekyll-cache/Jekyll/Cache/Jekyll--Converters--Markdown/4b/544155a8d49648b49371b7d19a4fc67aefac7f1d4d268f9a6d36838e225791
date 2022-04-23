@@ -1,0 +1,134 @@
+I"<h3 id="一基本概念">一、基本概念</h3>
+
+<h4 id="1-g1简介">1. G1简介</h4>
+
+<p>G1是一种服务器端的垃圾收集器，应用在多处理器和大容量内存环境中，在实现高吞吐量的同时，尽可能的满足垃圾收集暂停时间的要求。它是专门针对以下应用场景设计的:</p>
+
+<ul>
+  <li>
+    <p>像CMS收集器一样，能与应用程序线程并发执行。</p>
+  </li>
+  <li>
+    <p>整理空闲空间更快。</p>
+  </li>
+  <li>
+    <p>需要GC停顿时间更好预测。</p>
+  </li>
+  <li>
+    <p>不希望牺牲大量的吞吐性能。</p>
+  </li>
+  <li>
+    <p>不需要更大的Java Heap。</p>
+  </li>
+</ul>
+
+<h4 id="2-g1的内存划分">2. G1的内存划分</h4>
+
+<p>传统的GC收集器将连续的内存空间划分为新生代、老年代和永久代（JDK 8去除了永久代，引入了元空间Metaspace），这种划分的特点是各代的存储地址（逻辑地址，下同）是连续的。如下图所示：</p>
+
+<p><img src="/assets/images/posts/2019-11-16-G1/01.jpg" alt="" /></p>
+
+<p>而G1的各代存储地址是不连续的，每一代都使用了n个不连续的大小相同的Region，每个Region占有一块连续的虚拟内存地址。如下图所示：</p>
+
+<p><img src="/assets/images/posts/2019-11-16-G1/02.jpg" alt="" /></p>
+
+<p>在上图中，有一些Region标明了H，它代表Humongous，这表示这些Region存储的是巨大对象（humongous object），即大小大于等于region的对象。这些大对象是被直接分配到老年代的，为了防止反复拷贝移动，并且它们将在global concurrent marking阶段的cleanup和full GC阶段回收。
+空白的区块不属于任何一个分区；G1可以在需要的时候任意指定这个区域属于Eden或是old之类的。</p>
+
+<h4 id="3-辅助结构">3. 辅助结构</h4>
+
+<p>目的：为了避免全堆检查</p>
+
+<h5 id="1-remembered-sets">1. Remembered Sets</h5>
+
+<p>简称 RSets。跟踪指向某个heap区内的对象引用。堆内存中的每个区都有一个 RSet。 RSet 使heap区能并行独立地进行垃圾集合。在新生代中的Rset存放Old-&gt;Young的引用，而老年代用来存放Old-&gt;Old的引用。Rset实际是一个HashMap的结构，key存放region的起始地址，value存放card的索引的集合。</p>
+
+<h5 id="2-collection-sets">2. Collection Sets</h5>
+
+<p>简称 CSets。收集集合, 在一次GC中将执行垃圾回收的heap区。GC时在CSet中的所有存活数据(live data)都会被转移(复制/移动)。集合中的heap区可以是 Eden, survivor, 或 old generation。</p>
+
+<h5 id="3-卡card">3. 卡（Card）</h5>
+
+<p>HotSpot JVM的卡（Card）大小为512字节。</p>
+
+<h5 id="4-卡表card-table">4. 卡表（Card Table）</h5>
+
+<p>用于标记卡的状态，每个卡表项对应一个卡。卡表（Card Table）被实现为一个简单的字节数组，即卡表的每个标记项为1个字节。也是一个记录Old-&gt;Young引用的结构，用来记录那些old region有对象引用新生代和在并发标记阶段有哪些old region有发生引用改变。</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>OpenJDK/Oracle 1.6/1.7/1.8 JVM默认的卡标记简化逻辑如下：
+
+CARD_TABLE [this address &gt;&gt; 9] = 0;
+
+首先，计算对象引用所在卡页的卡表索引号。将地址右移9位，相当于用地址除以512（2的9次方）。可以这么理解，假设卡表卡页的起始地址为0，那么卡表项0、1、2对应的卡页起始地址分别为0、512、1024（卡表项索引号乘以卡页512字节）。
+</code></pre></div></div>
+
+<p>Card Table结构：</p>
+
+<p><img src="/assets/images/posts/2019-11-16-G1/04.png" alt="" /></p>
+
+<p>一个region的大致结构：</p>
+
+<p><img src="/assets/images/posts/2019-11-16-G1/03.png" alt="" /></p>
+
+<p>还有很多算法和数据结构用于辅助，例如，Post-Write Barrrier，起始快照算法 Snapshot at the beginning (SATB)，并发优化线程 Concurrence Refinement Threads，TAMS。等等。</p>
+
+<h4 id="4-gc-roots">4. GC Roots</h4>
+
+<p>在Java中，可作为GC Roots的对象包括以下几种：</p>
+
+<ul>
+  <li>
+    <p>虚拟机栈（栈帧中的局部变量表，Local Variable Table）中引用的对象。</p>
+  </li>
+  <li>
+    <p>方法区中类静态属性引用的对象。</p>
+  </li>
+  <li>
+    <p>方法区中常量引用的对象。</p>
+  </li>
+  <li>
+    <p>本地方法栈中JNI（即一般说的Native方法）引用的对象。</p>
+  </li>
+</ul>
+
+<p>为了避免一个不漏地检查完所有执行上下文和全局的引用位置。在HotSpot的实现中，是使用一组称为OopMap的数据结构来达到这个目的的，在类加载完成的时候，HotSpot就把对象内什么偏移量上是什么类型的数据计算出来，在JIT编译过程中，也会在特定的位置记录下栈和寄存器中那些是引用。</p>
+
+<h3 id="二g1-gc模式">二、G1 GC模式</h3>
+
+<p>G1提供了两种GC模式，Young GC和Mixed GC</p>
+
+<ul>
+  <li>
+    <p>Young GC：选定所有年轻代里的Region。通过控制年轻代的region个数，即年轻代内存大小，来控制young GC的时间开销。 它是Stop The World（STW）。</p>
+  </li>
+  <li>
+    <p>Mixed GC：成功完成并发标记阶段后，G1 GC从执行Young GC切换为执行Mixed GC。在Mixed GC中，G1 GC可以选择将一些old region和新生代一起进行GC。所添加的旧区域的确切数量由多个参数控制。在G1 GC完成Mixed GC之后，G1恢复执行Young GC，直到下一个标记周期完成。</p>
+  </li>
+</ul>
+
+<p>Mixed GC不是full GC，它只能回收部分老年代的Region，如果mixed GC实在无法跟上程序分配内存的速度，导致老年代填满无法继续进行Mixed GC，就会使用serial old GC（full GC）来收集整个GC heap。所以我们可以知道，G1是不提供full GC的。</p>
+
+<p>G1 GC使用“snapshot-at-the-beginning”（SATB）算法，该算法在标记周期开始时从逻辑上保存堆中活动对象集的快照。活动对象集还包括自标记周期开始以来分配的对象。G1 GC标记算法使用预写屏障来记录和标记属于逻辑快照的对象。</p>
+
+<h4 id="标记周期的各个阶段">标记周期的各个阶段</h4>
+
+<p>标记周期分为以下几个阶段：</p>
+
+<ul>
+  <li>
+    <p>初始标记阶段：G1 GC在此阶段标记根。此阶段由常规（STW）的Young GC承担。</p>
+  </li>
+  <li>
+    <p>根区域扫描阶段：G1 GC扫描在初始标记阶段标记的survivor区域，以便扫描有引用新生代中对象的old region并标记参考对象。该阶段与应用程序（非STW）同时运行，并且必须在下一个Young GC开始之前完成。</p>
+  </li>
+  <li>
+    <p>并发标记阶段：G1 GC在整个堆中找到可访问的（活动的）对象。此阶段与应用程序同时发生，并且可以被Young GC中断。</p>
+  </li>
+  <li>
+    <p>标记阶段：此阶段是STW，有助于完成标记周期。G1 GC使用SATB缓冲区，跟踪未访问的活动对象，并执行标记处理。</p>
+  </li>
+  <li>
+    <p>清理阶段：在此最后阶段，G1 GC执行accounting和RSet清理的STW操作。在accounting期间，G1 GC会识别出完全空闲的区域和混合垃圾收集候选区域（Cset存放这些区域的地址）。它将重置并将空区域返回到空闲列表时。这个清理阶段是部分并发</p>
+  </li>
+</ul>
+:ET

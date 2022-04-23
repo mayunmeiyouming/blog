@@ -1,0 +1,343 @@
+I"c^<blockquote>
+  <p>本文为翻译</p>
+</blockquote>
+
+<p>为了提供有效的，受保护的多任务处理，80386采用了几种特殊的数据结构。但是，它没有使用特殊的指令来控制多任务。相反，当它们引用特殊数据结构时，它会以不同的方式去解释普通控制传递指令。支持多任务的寄存器和数据结构有：</p>
+
+<ul>
+  <li>
+    <p>任务状态段（Task state segment）</p>
+  </li>
+  <li>
+    <p>任务状态段描述符（Task state segment descriptor）</p>
+  </li>
+  <li>
+    <p>任务寄存器（Task register）</p>
+  </li>
+  <li>
+    <p>任务门描述符（Task gate descriptor）</p>
+  </li>
+</ul>
+
+<p>使用这些结构，80386可以快速的从一个任务切换到另一个任务，并且保存原始任务的上下文，以便以后可以重新启动该任务。除了简单的任务切换之外，80386还提供了另外两个任务管理功能：</p>
+
+<ol>
+  <li>
+    <p>中断和异常可能导致任务切换（如果系统设计需要）。处理器不仅需要自动切换到处理中断或异常的任务，而且在处理中断或异常后也自动切换回被中断的任务。Interrupt tasks may interrupt lower-priority interrupt tasks to any depth.</p>
+  </li>
+  <li>
+    <p>每次切换到另一个任务时，80386也可以切换到另一个LDT和另一个页目录。因此，每个任务可以具有逻辑到线性地址的不同映射以及线性到物理地址的不同映射。这是另一种保护功能，因为可以隔离任务并防止它们相互干扰。</p>
+  </li>
+</ol>
+
+<h2 id="任务状态段task-state-segment">任务状态段（Task state segment）</h2>
+
+<p>处理器管理任务所需的所有信息都存储在特殊类型的段中，即任务状态段（TSS）。<a href="#01">Figure 7-1</a>显示了用于执行80386任务的TSS格式。</p>
+
+<p>TSS的字段分为两类：</p>
+
+<ol>
+  <li>处理器随着任务的每一次切换而更新动态集。该集合包括存储以下内容的字段：</li>
+</ol>
+
+<ul>
+  <li>通用寄存器（EAX，ECX，EDX，EBX，ESP，EBP，ESI，EDI）</li>
+  <li>段寄存器（ES，CS，SS，DS，FS，GS）</li>
+  <li>标志寄存器（EFLAGS）</li>
+  <li>指令指针（EIP）</li>
+  <li>先前执行的任务的TSS的selector（仅在可能返回时更新）</li>
+</ul>
+
+<ol>
+  <li>处理器读取但不会更改的静态集。该集合包括存储以下内容的字段：</li>
+</ol>
+
+<ul>
+  <li>任务的LDT的selector</li>
+  <li>包含任务页目录基址的寄存器（PDBR）（仅在启用分页时才只读）</li>
+  <li>指向特权级别0-2的堆栈的指针。</li>
+  <li>T位（调试陷阱位），当任务切换发生时，导致处理器触发调试异常。</li>
+  <li>The I/O map base</li>
+</ul>
+
+<p>任务状态段可以位于线性空间中的任何位置。唯一需要注意的情况是TSS跨越页面边界以及高地址页面不存在。在这种情况下，如果在任务切换期间读取TSS时处理器遇到不存在的页面，则会引发异常。可以通过以下两种策略之一避免此类异常：</p>
+
+<ol>
+  <li>
+    <p>通过分配TSS，使其不跨越页面边界。</p>
+  </li>
+  <li>
+    <p>通过确保在任务切换时两个页面都存在或不存在。如果两个页面都不存在，那么缺页异常处理程序必须在重新启动导致任务切换的指令之前使两个页面都存在。</p>
+  </li>
+</ol>
+
+<p><span id="01">
+<img src="/assets/images/posts/2019-12-29-Multitasking/01.gif" alt="" /></span></p>
+
+<h2 id="tss描述符tss-descriptor">TSS描述符（TSS Descriptor）</h2>
+
+<p>与其他所有段一样，任务状态段由描述符定义。 TSS描述符的格式如<a href="#02">图7-2</a>所示。</p>
+
+<p>类型字段中的B位指示任务是否忙。类型代码9表示忙碌(B位为0)的任务；类型代码11表示任务繁忙(B位为1)。任务是不可重入的。 B位允许处理器检测意图切换到已经繁忙的任务的行为。BASE，LIMIT和DPL字段以及G位和P位的功能类似于数据段描述符中的对应功能。但是，LIMIT字段的值必须大于或等于103。尝试切换到其TSS描述符的限制小于103的任务会导致异常。更大的限制是可以的，如果存在I / O权限映射，则需要更大的限制。如果将其他数据存储在与TSS相同的段中，则较大的限制可能也便于系统软件的使用。</p>
+
+<p>有权访问TSS描述符的程序可能引发任务切换。在大多数系统中，TSS描述符的DPL字段应设置为零，以便只有受信任的软件才有权执行任务切换。</p>
+
+<p>程序拥有对TSS描述符的访问权，但是没有读取或修改TSS的权利。只能使用能将TSS重新定义为数据段的描述符来完成读取和修改。尝试将TSS描述符加载到任何段寄存器（CS，SS，DS，ES，FS，GS）中都会导致异常。</p>
+
+<p>TSS描述符只能存放在GDT中。尝试使用TI = 1（指当前LDT）的selector去识别TSS会导致异常。</p>
+
+<p><span id="02">
+<img src="/assets/images/posts/2019-12-29-Multitasking/02.gif" alt="" /></span></p>
+
+<h2 id="task-register">Task Register</h2>
+
+<p>任务寄存器（TR）通过指向TSS来标识当前正在执行的任务。<a href="#03">图7-3</a>显示了处理器访问当前TSS的方法。</p>
+
+<p>任务寄存器具有<code class="language-plaintext highlighter-rouge">可见</code>部分（即，可以由指令读取和改变）和<code class="language-plaintext highlighter-rouge">不可见</code>部分（由处理器维护以对应于可见部分；不能由任何指令读取）。可见部分中的<code class="language-plaintext highlighter-rouge">selector</code>选择GDT中的TSS描述符。处理器使用不可见部分来缓存TSS描述符中的base和limit值。将base和limit保存在寄存器中可以使任务的执行效率更高，因为处理器在引用当前任务的TSS时不需要从内存中重复获取这些值。</p>
+
+<p>LTR和STR指令用于修改和读取任务寄存器的可见部分。两条指令都使用一个操作数，即位于内存或通用寄存器中的16位selector。</p>
+
+<p>LTR（Load task register）使用selector作为操作数存储到任务寄存器的可见部分，这个selector一定会指向GDT中的一个TSS描述符。LTR还会将操作数指向的TSS描述符中的信息存储在任务寄存器中的不可见部分。 LTR是特权指令；它只有在CPL为零时才能执行。LTR通常用于在系统初始化期间为任务寄存器提供初始值。此后，TR的内容通过任务切换操作进行更改。</p>
+
+<p>STR（Store task register）读取任务寄存器的可见部分，并存储在通用寄存器或内存中。 STR不需要特权。</p>
+
+<p><span id="03">
+<img src="/assets/images/posts/2019-12-29-Multitasking/03.gif" alt="" /></span></p>
+
+<h2 id="task-gate-descriptor">Task Gate Descriptor</h2>
+
+<p>Task Gate Descriptor对TSS提供了间接的，受保护的引用。<a href="#04">图7-4</a>说明了Task Gate的格式。</p>
+
+<p>Task Gate的SELECTOR字段必须引用TSS描述符。处理器未使用selector中的RPL值。</p>
+
+<p>Task Gate的DPL字段控制使用描述符进行任务切换的权限。除非selector的RPL和程序的CPL的最大值在数值上小于或等于描述符的DPL，否则程序可能不会选择Task Gate Descriptor。此约束可防止不受信任的程序导致任务切换。（请注意，使用task gate时，目标TSS描述符的DPL不用于特权检查。）</p>
+
+<p>可以访问task gate的程序有权执行任务切换，就像可以访问TSS描述符的程序一样。80386除TSS描述符外还具有task gate，可以满足以下三个需求：</p>
+
+<ol>
+  <li>
+    <p>一个任务需要有一个busy bit。因为busy bit存储在TSS描述符中，所以每个任务应该只有一个这样的描述符。但是，可能会有多个task gate选择同一个TSS描述符。</p>
+  </li>
+  <li>
+    <p>提供对任务的选择性访问的需求。任务门可以满足此需求，因为它们可以驻留在LDT中，并且拥有与TSS描述符的DPL不同的DPL。如果程序没有访问GDT中的TSS描述符（通常DPL为0）的特权，但该程序可以访问该任务在LDT中的task gate，则该程序仍可以切换到另一个任务。使用task gate，系统软件拥有限制任务切换到特定任务的权利。</p>
+  </li>
+  <li>
+    <p>需要中断或异常触发任务切换。task gate也可以驻留在IDT中，从而使中断和异常可能触发任务切换。当中断或异常引导到包含task gate的IDT条目时，80386将切换到指定的任务。因此，系统中的所有任务都可以从中断任务隔离提供的保护中受益。</p>
+  </li>
+</ol>
+
+<p><a href="#05">图7-5</a>说明了LDT中的task gate和IDT中的task gate是如何识别同一任务。</p>
+
+<p><span id="04">
+<img src="/assets/images/posts/2019-12-29-Multitasking/04.gif" alt="" /></span></p>
+
+<p><span id="05">
+<img src="/assets/images/posts/2019-12-29-Multitasking/05.gif" alt="" /></span></p>
+
+<h2 id="任务切换task-switching">任务切换（Task Switching）</h2>
+
+<p>在以下四种情况中的任何一种情况下，80386都会切换到另一个任务：</p>
+
+<ol>
+  <li>
+    <p>当前任务将执行引用TSS描述符的<code class="language-plaintext highlighter-rouge">JMP</code>或<code class="language-plaintext highlighter-rouge">CALL</code>。</p>
+  </li>
+  <li>
+    <p>当前任务执行引用task gate的<code class="language-plaintext highlighter-rouge">JMP</code>或<code class="language-plaintext highlighter-rouge">CALL</code>。</p>
+  </li>
+  <li>
+    <p>中断或异常触发了在IDT中的task gate。</p>
+  </li>
+  <li>
+    <p>设置NT标志时，当前任务将执行<code class="language-plaintext highlighter-rouge">IRET</code>。</p>
+  </li>
+</ol>
+
+<p>JMP，CALL，IRET，中断和异常是80386的所有普通机制，可以在不需要任务切换的情况下使用。引用的描述符类型或标志字中的NT（嵌套任务）位都可以区分标准机制和导致任务切换的变量。</p>
+
+<p>要引起任务切换，JMP或CALL指令可以引用TSS描述符或任务门。两种情况下的效果都相同：80386切换到指定的任务。</p>
+
+<p>当异常或中断引导至IDT中的任务门时，将导致任务切换。如果它引导到IDT中的中断或陷阱门，则不会发生任务切换。</p>
+
+<p>无论是作为任务被调用还是作为中断任务的程序被调用，中断处理程序始终将控制权返回给被中断的程序。但是，如果设置了NT标志，则处理程序为中断任务，IRET切换回中断的任务。</p>
+
+<p>任务切换操作涉及以下步骤：</p>
+
+<ol>
+  <li>
+    <p>检查是否允许当前任务切换到指定任务。数据访问特权规则适用于JMP或CALL指令。 TSS描述符或任务门的DPL必须在数值上大于（例如，较低的特权级别）大于或等于<code class="language-plaintext highlighter-rouge">selector</code>的CPL和RPL的最大值。无论目标任务门的DPL或TSS描述符如何，都可以通过异常，中断和IRET来切换任务。</p>
+  </li>
+  <li>
+    <p>检查新任务的TSS描述符是否被标记为存在并具有有效限制。到此为止的任何错误都将在传给任务的上下文。错误是可重新启动的，并且可以以一种对应用程序透明的方式进行处理。</p>
+  </li>
+  <li>
+    <p>保存当前任务的状态。处理器找到任务寄存器中缓存的当前TSS的基地址。它将寄存器复制到当前的TSS（EAX，ECX，EDX，EBX，ESP，EBP，ESI，EDI，ES，CS，SS，DS，FS，GS和标志寄存器）。TSS的EIP字段指向导致任务切换的指令之后的指令。</p>
+  </li>
+  <li>
+    <p>使用任务寄存器的<code class="language-plaintext highlighter-rouge">selector</code>加载任务的TSS描述符，并将任务的TSS描述符标记为忙的状态，然后将MSW的TS位（任务切换）置1。<code class="language-plaintext highlighter-rouge">selector</code>可以是控制传递指令的操作数，也可以是从任务门获取的。</p>
+  </li>
+  <li>
+    <p>从其TSS加载传入任务的状态并恢复执行。加载的寄存器为LDT寄存器；标志寄存器；通用寄存器EIP，EAX，ECX，EDX，EBX，ESP，EBP，ESI，EDI;段寄存器ES，CS，SS，DS，FS和GS；和PDBR。在此步骤中检测到的任何错误都在传入任务的上下文中发生。</p>
+  </li>
+</ol>
+
+<p>请注意，发生任务切换时，正在进行的任务的状态始终会保存。如果恢复执行该任务，它将在引起任务切换的指令之后开始。当任务停止执行时，寄存器将恢复为其所保存的值。</p>
+
+<p>每个任务切换都会将MSW（机器状态字）中的TS位（任务切换）置1。如果存在协处理器（例如数字协处理器），则TS标志对于系统软件很有用。TS位发出信号，表明协处理器的上下文可能不同于当前的80386任务。</p>
+
+<p>在传入任务中记录任务切换异常的异常处理程序（表7-1的Test 4 - 16导致的异常）应谨慎对待可能加载导致异常的选择器的任何操作。除非异常处理程序首先检查<code class="language-plaintext highlighter-rouge">selector</code>并解决任何潜在问题，否则此类操作可能会导致另一个异常。</p>
+
+<p>新任务的恢复执行的特权级别不受要旧任务执行时的特权级别的限制或影响。由于任务被它们各自的地址空间和TSS隔离，并且可以使用特权规则来防止对TSS的不正确访问，因此不需要特权规则来约束任务CPL之间的关系。新任务以TSS中的CS的selectord1值的RPL指示的特权级别开始执行。</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Table 7-1. Checks Made during a Task Switch
+
+NP <span class="o">=</span> Segment-not-present exception
+GP <span class="o">=</span> General protection fault
+TS <span class="o">=</span> Invalid TSS
+SF <span class="o">=</span> Stack fault
+
+Validity tests of a selector check that the selector is <span class="k">in </span>the proper
+table <span class="o">(</span>e.g., the LDT selector refers to the GDT<span class="o">)</span>, lies within the bounds of
+the table, and refers to the proper <span class="nb">type </span>of descriptor <span class="o">(</span>e.g., the LDT
+selector refers to an LDT descriptor<span class="o">)</span><span class="nb">.</span>
+
+Test     Test Description                   Exception    Error Code Selects
+
+  1      Incoming TSS descriptor is
+         present                            NP           Incoming TSS
+  2      Incoming TSS descriptor is
+         marked not-busy                    GP           Incoming TSS
+         marked not-busy
+  3      Limit of incoming TSS is
+         greater than or equal to 103       TS           Incoming TSS
+
+             <span class="nt">--</span> All register and selector values are loaded <span class="nt">--</span>
+
+  4      LDT selector of incoming
+         task is valid                      TS           Incoming TSS
+  5      LDT of incoming task is  
+         present                            TS           Incoming TSS
+  6      CS selector is valid               TS           Code segment
+  7      Code segment is present            NP           Code segment
+  8      Code segment DPL matches  
+         CS RPL                             TS           Code segment
+  9      Stack segment is valid             GP           Stack segment
+ 10      Stack segment is present           SF           Stack segment
+ 11      Stack segment DPL <span class="o">=</span> CPL            SF           Stack segment
+ 12      Stack-selector RPL <span class="o">=</span> CPL           GP           Stack segment
+ 13      DS, ES, FS, GS selectors are
+         valid                              GP           Segment
+ 14      DS, ES, FS, GS segments
+         are readable                       GP           Segment
+ 15      DS, ES, FS, GS segments
+         are present                        NP           Segment
+ 16      DS, ES, FS, GS segment DPL  
+         <span class="o">&gt;=</span> CPL <span class="o">(</span>unless these are
+         conforming segments<span class="o">)</span>               GP           Segment
+</code></pre></div></div>
+
+<h2 id="task-linking">Task Linking</h2>
+
+<p>TSS的back-link字段和标志字的NT位（嵌套任务）允许80386自动返回调用了另一个任务或被另一个任务中断的任务。当CALL指令，中断指令，外部中断或异常导致切换到新任务时，80386自动使用旧任务的TSS的选择器填充新TSS的back-link，同时，将新任务的标志寄存器中的NT位置1。NT标志指示back-link字段是否有效。新任务通过执行IRET指令释放控制权。解释IRET时，80386将检查NT标志。如果设置了NT，则80386将切换回由back-link字段选择的任务。表7-2总结了这些字段的用法。</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Table 7-2. Effect of Task Switch on BUSY, NT, and Back-Link
+
+Affected Field      Effect of JMP      Effect of            Effect of
+                    Instruction        CALL Instruction     IRET Instruction
+
+Busy bit of         Set, must be       Set, must be 0       Unchanged,
+incoming task       0 before           before               must be <span class="nb">set
+
+</span>Busy bit of         Cleared            Unchanged            Cleared
+outgoing task                          <span class="o">(</span>already <span class="nb">set</span><span class="o">)</span>
+
+NT bit of           Cleared            Set                  Unchanged
+incoming task
+
+NT bit of           Unchanged          Unchanged            Cleared
+outgoing task
+
+Back-link of        Unchanged          Set to outgoing      Unchanged
+incoming task                          TSS selector
+
+Back-link of        Unchanged          Unchanged            Unchanged
+outgoing task
+</code></pre></div></div>
+
+<h3 id="busy-bit-prevents-loops">Busy Bit Prevents Loops</h3>
+
+<p>TSS描述符的B位（busy bit）确保反向链接的完整性。随着中断任务中断其他中断任务或被调用任务调用其他任务，反向链接链的长度可能会增加。busy bit确保CPU可以检测到任何尝试创建循环的行为。循环将表明尝试重新进入已经在运行的任务。但是，TSS不是可重入的资源。</p>
+
+<p>处理器按以下方式使用busy bit：</p>
+
+<ol>
+  <li>
+    <p>切换到任务时，处理器会自动设置新任务的busy bit。</p>
+  </li>
+  <li>
+    <p>从任务切换时，如果不将旧任务的busy bit放置在反向链接链上（即引起任务切换的指令是JMP或IRET），则处理器会自动清除该任务的busy bit。如果将任务放置在反向链接链上，则其busy bit将保持忙的状态。</p>
+  </li>
+  <li>
+    <p>切换到任务时，如果新任务的busy bit已设置，则处理器会发出异常信号。</p>
+  </li>
+</ol>
+
+<p>通过这些操作，处理器可以防止任务切换到自身或切换到反向链接链上的任何任务，从而防止任务的无效的重入。</p>
+
+<p>即使在多处理器配置中busy bit也有效，因为处理器在设置或清除busy位时会自动对总线加锁。此操作可确保两个处理器不会同时调用同一任务。</p>
+
+<h3 id="modifying-task-linkages">Modifying Task Linkages</h3>
+
+<p>任务链顺序的任何修改都应仅通过可信任的软件来完成，以便正确的更新back-link和the busy-bit。在中断任务之前，可能需要进行此类更改才能恢复中断的任务。受信任的软件从反向链接链中删除任务必须遵循以下策略之一：</p>
+
+<ol>
+  <li>
+    <p>首先更改中断任务的TSS中的反向链接字段，然后将列表中被删除的任务的TSS描述符中的busy位清除。</p>
+  </li>
+  <li>
+    <p>确保在更新back-link和busy-bit的时候没有中断发生。</p>
+  </li>
+</ol>
+
+<h2 id="任务地址空间task-address-space">任务地址空间（Task Address Space）</h2>
+
+<p>TSS的LDT selector和PDBR字段使软件系统设计人员可以灵活地利用80386的段和页面映射功能。通过为每个任务选择合适的段和页面映射，任务可以共享地址空间，也可以拥有彼此大不相同的地址空间，或者可以在这两个程序之间具有任何程度的共享。</p>
+
+<p>任务具有不同地址空间的能力是80386保护模式的重要方面。如果模块无法访问相同的地址空间，则一个任务中的模块不能干扰另一任务中的模块。80386灵活的内存管理功能使系统设计人员可以将共享地址空间的区域分配给需要相互协作的不同任务的一些模块。</p>
+
+<h3 id="task-linear-to-physical-space-mapping">Task Linear-to-Physical Space Mapping</h3>
+
+<p>任务的线性地址到物理地址的映射的有两种选择：</p>
+
+<ol>
+  <li>
+    <p>所有任务之间共享一个线性地址到物理地址的映射。未启用分页时，这是唯一的可能性。没有页表，所有线性地址都映射到相同的物理地址。启用分页时，这种线性地址到物理地址的映射方式是所有任务使用一个页目录。如果操作系统还实现页面级虚拟内存，则利用的线性空间可能会超过可用的物理空间。</p>
+  </li>
+  <li>
+    <p>线性地址到物理地址的映射有几个部分重叠。通过为每个任务使用不同的页目录来实现这种形式。由于PDBR（页目录基址寄存器）是在任务切换时从TSS中加载的，因此每个任务可能具有不同的页目录。</p>
+  </li>
+</ol>
+
+<p>从理论上讲，不同任务的线性地址空间可以映射到完全不同的物理地址。如果不同页目录的条目指向不同的页表，并且页表指向物理内存的不同页面，则任务不共享任何物理地址。</p>
+
+<p>实际上，所有任务的线性地址空间的某些部分必须映​​射到相同的物理地址。任务状态段必须位于公共空间中，以便处理器在任务切换期间读取和更新TSS的时候，TSS地址的映射不会被修改。GDT的线性空间也应被映射到公共物理空间；否则，GDT的目的就无法实现。<a href="#06">图7-6</a>显示了两个任务的线性空间是怎样通过共享页表重叠物理空间的。</p>
+
+<h3 id="task-logical-address-space">Task Logical Address Space</h3>
+
+<p>就其本身而言，常见的线性地址到物理地址空间的映射无法实现任务之间的数据共享。要共享数据，任务还必须具有通用的逻辑地址到线性地址空间的映射；即，它们还必须有权访问指向共享线性地址空间的描述符。有三种创建常见的逻辑地址到物理地址空间映射的方法：</p>
+
+<ol>
+  <li>
+    <p>通过GDT。所有任务都可以访问GDT中的描述符。如果这些描述符指向线性地址空间，该线性地址空间映射到所有任务的公共物理地址空间，则任务可以共享数据和指令。</p>
+  </li>
+  <li>
+    <p>通过共享LDT。如果其TSS中的LDT selector选择相同的LDT段，则两个或多个任务可以使用相同的LDT。那些LDT驻留描述符指向被映射到公共物理空间的线性空间，并且允许任务共享物理内存。这种共享方法比GDT共享更具选择性。共享可以限于特定任务。系统中的其他任务可能具有不同的LDT，这些LDT无法使它们访问共享区域。</p>
+  </li>
+  <li>
+    <p>LDT中的描述符别名。不同LDT的某些描述符可能指向相同的线性地址空间。如果通过涉及的任务的页面映射将该线性地址空间映射到相同的物理空间，则这些描述符允许任务共享公共空间。这样的描述符通常称为<code class="language-plaintext highlighter-rouge">aliases</code>。这种共享方法比前两种方法更具选择性。 LDT中的其他描述符可能指向不同的线性地址或未共享的线性地址。</p>
+  </li>
+</ol>
+
+<p><span id="06">
+<img src="/assets/images/posts/2019-12-29-Multitasking/06.gif" alt="" /></span></p>
+:ET

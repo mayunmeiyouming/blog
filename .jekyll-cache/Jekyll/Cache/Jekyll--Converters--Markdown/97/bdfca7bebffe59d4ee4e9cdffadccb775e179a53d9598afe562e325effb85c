@@ -1,0 +1,50 @@
+I"r<blockquote>
+  <p>本文为原创</p>
+</blockquote>
+
+<h2 id="介绍">介绍</h2>
+
+<p>在本实验中，你将构建一个MapReduce系统。你将实现一个工作进程和一个主进程，工作进程调用应用程序的Map和Reduce函数并处理读写文件，主进程将任务分发给工作线程并处理失败的工作程序。你将构建类似于<a href="http://research.google.com/archive/mapreduce-osdi04.pdf">MapReduce论文</a>的内容。</p>
+
+<h2 id="linux环境搭建">Linux环境搭建</h2>
+
+<h3 id="工具">工具</h3>
+
+<p>使用go进行评分，go版本为1.13，建议使用这个版本。使用命令<code class="language-plaintext highlighter-rouge">go version</code>可以查看go版本。这些实验可能无法直接在Windows上运行，建议使用linux或者mac。</p>
+
+<p>在命令行执行下面的命令：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wget <span class="nt">-qO-</span> https://dl.google.com/go/go1.13.6.linux-amd64.tar.gz | <span class="nb">sudo tar </span>xz <span class="nt">-C</span> /usr/local
+</code></pre></div></div>
+
+<p>然后将<code class="language-plaintext highlighter-rouge">usr/local/go/bin</code>添加到PATH下，执行命令<code class="language-plaintext highlighter-rouge">go version</code>，如果成功，则安装成功。</p>
+
+<h3 id="入门">入门</h3>
+
+<p>你将使用git（版本控制系统）获取实验软件。要了解有关git的更多信息，请参阅Pro Git或git用户手册。获取6.824实验软件：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>git clone git://g.csail.mit.edu/6.824-golabs-2020 6.824
+<span class="nv">$ </span><span class="nb">cd </span>6.824
+<span class="nv">$ </span><span class="nb">ls
+</span>Makefile src
+<span class="err">$</span>
+</code></pre></div></div>
+
+<p>我们在<code class="language-plaintext highlighter-rouge">src/main/mrsequential.go</code>中为你供了一个简单的顺序mapreduce实现。它可以在一个进程中运行map和reduce。我们还为你提供了两个MapReduce应用程序：<code class="language-plaintext highlighter-rouge">mrapps/wc.go</code>中的单词计数，<code class="language-plaintext highlighter-rouge">mrapps/indexer.go</code>中的文本索引。你可以按如下顺序进行字数统计：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">cd</span> ~/6.824
+<span class="nv">$ </span><span class="nb">cd </span>src/main
+<span class="nv">$ </span>go build <span class="nt">-buildmode</span><span class="o">=</span>plugin ../mrapps/wc.go
+<span class="nv">$ </span><span class="nb">rm </span>mr-out<span class="k">*</span>
+<span class="nv">$ </span>go run mrsequential.go wc.so pg<span class="k">*</span>.txt
+<span class="nv">$ </span>more mr-out-0
+A 509
+ABOUT 2
+ACT 8
+...
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">mrsequential.go</code>将统计名为pg-xxx.txt的文本文件，并将数据保存在文件<code class="language-plaintext highlighter-rouge">mr-out-0</code>中。</p>
+
+<p>可以从<code class="language-plaintext highlighter-rouge">mrsequential.go</code>借鉴代码。你还应该查看<code class="language-plaintext highlighter-rouge">mrapps/wc.go</code>，以了解MapReduce。</p>
+:ET

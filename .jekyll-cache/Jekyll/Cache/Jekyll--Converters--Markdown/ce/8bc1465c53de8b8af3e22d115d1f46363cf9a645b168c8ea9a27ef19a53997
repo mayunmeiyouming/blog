@@ -1,0 +1,240 @@
+I"�i<blockquote>
+  <p>本文为原创</p>
+</blockquote>
+
+<p>在entry.S中，将页目录表<code class="language-plaintext highlighter-rouge">entry_pgdir</code>存放入cr3寄存器。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="n">movl</span>    <span class="err">$</span><span class="p">(</span><span class="n">RELOC</span><span class="p">(</span><span class="n">entry_pgdir</span><span class="p">)),</span> <span class="o">%</span><span class="n">eax</span>
+<span class="n">f0100015</span><span class="o">:</span>    <span class="n">b8</span> <span class="mo">00</span> <span class="mi">30</span> <span class="mi">11</span> <span class="mo">00</span>       <span class="n">mov</span>    <span class="err">$</span><span class="mh">0x113000</span><span class="p">,</span><span class="o">%</span><span class="n">eax</span>
+    <span class="n">movl</span>    <span class="o">%</span><span class="n">eax</span><span class="p">,</span> <span class="o">%</span><span class="n">cr3</span>
+<span class="n">f010001a</span><span class="o">:</span>    <span class="mi">0</span><span class="n">f</span> <span class="mi">22</span> <span class="n">d8</span>             <span class="n">mov</span>    <span class="o">%</span><span class="n">eax</span><span class="p">,</span><span class="o">%</span><span class="n">cr3</span>
+</code></pre></div></div>
+
+<h2 id="exercise-1">Exercise 1</h2>
+
+<p>首先分析<code class="language-plaintext highlighter-rouge">boot_alloc()</code>函数的作用.这个函数是进行第一个页分配.如果这个函数分配虚拟内存成功,就会返回一个空闲内存的地址.其中的ROUNDUP()函数会将n计算成一个大于或等于PGSIZE，且是PGSIZE的倍数的值.<code class="language-plaintext highlighter-rouge">end</code>指向的是第一个未使用的虚拟内存地址,也是内核的末尾地址.</p>
+
+<p>再看我们要写的代码的注释:分配一个n大小的内存,由于xv6内存页都是固定的所以需要使用ROUNDUP()函数分配分配一个大于n且是PGSIZE的倍数的内存.并且在n参数是0时,返回NULL值.</p>
+
+<p>这时jos启动时，jos的kerninfo命令的结果：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Special kernel symbols:
+  _start                  0010000c <span class="o">(</span>phys<span class="o">)</span>
+  entry  f010000c <span class="o">(</span>virt<span class="o">)</span>  0010000c <span class="o">(</span>phys<span class="o">)</span>
+  etext  f0102879 <span class="o">(</span>virt<span class="o">)</span>  00102879 <span class="o">(</span>phys<span class="o">)</span>
+  edata  f0116060 <span class="o">(</span>virt<span class="o">)</span>  00116060 <span class="o">(</span>phys<span class="o">)</span>
+  end    f01166a0 <span class="o">(</span>virt<span class="o">)</span>  001166a0 <span class="o">(</span>phys<span class="o">)</span>
+Kernel executable memory footprint: 90KB
+</code></pre></div></div>
+
+<p>代码如下:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="n">result</span> <span class="o">=</span> <span class="n">nextfree</span><span class="p">;</span>
+    <span class="n">nextfree</span> <span class="o">+=</span> <span class="n">ROUNDUP</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">PGSIZE</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>分析mem_init()的注释:分配一个<code class="language-plaintext highlighter-rouge">npages * sizeof(struct PageInfo)</code>大小的内存给<code class="language-plaintext highlighter-rouge">pages</code>,然后将pages的内存段初始化为0.pages是记录物理页的状态.</p>
+
+<p>代码如下:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">pages</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">PageInfo</span> <span class="o">*</span><span class="p">)</span> <span class="n">boot_alloc</span><span class="p">(</span><span class="n">npages</span> <span class="o">*</span> <span class="nf">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">PageInfo</span><span class="p">));</span>
+<span class="n">memset</span><span class="p">(</span><span class="n">pages</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">npages</span> <span class="o">*</span> <span class="nf">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">PageInfo</span><span class="p">));</span>
+</code></pre></div></div>
+
+<p>分析page_init()函数,在这个函数初始化物理内存页后,boot_alloc()函数将不再使用。除了将物理内存页0和IO hole区域开始到内核结束的区域置为已使用外,以及用于存放kern_pgdir和pages的区域，其他的是未使用。由于boot_alloc函数分配的地址是与<code class="language-plaintext highlighter-rouge">end</code>相连接的，所以这块区域的开始页码是<code class="language-plaintext highlighter-rouge">IOPHYSMEM/PGSIZE</code>,结束页码是<code class="language-plaintext highlighter-rouge">ROUNDUP(0)/PGSIZE</code>,<code class="language-plaintext highlighter-rouge">ROUNDUP(0)</code>返回已经使用的内存的结尾地址。</p>
+
+<p>代码如下:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="kt">size_t</span> <span class="n">i</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">npages</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span><span class="p">(</span><span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">pages</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">pp_ref</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+            <span class="n">pages</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">pp_link</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="k">if</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="n">PGSIZE</span> <span class="o">&gt;=</span> <span class="n">IOPHYSMEM</span> <span class="o">&amp;&amp;</span> <span class="n">i</span> <span class="o">*</span> <span class="n">PGSIZE</span> <span class="o">&lt;=</span> <span class="n">PADDR</span><span class="p">(</span><span class="n">boot_alloc</span><span class="p">(</span><span class="mi">0</span><span class="p">)))</span> <span class="p">{</span>
+            <span class="n">pages</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">pp_ref</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+            <span class="n">pages</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">pp_link</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">pages</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">pp_ref</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="n">pages</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">pp_link</span> <span class="o">=</span> <span class="n">page_free_list</span><span class="p">;</span>
+            <span class="n">page_free_list</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">pages</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+</code></pre></div></div>
+
+<p>分析page_alloc()函数,其中可以通过page2kva()函数，将struct PageInfo的指针地址转换成虚拟地址。page_free_list会存放空闲列表的头节点</p>
+
+<p>代码如下:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">// Fill this function in</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">page_free_list</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">PageInfo</span><span class="o">*</span> <span class="n">result</span> <span class="o">=</span> <span class="n">page_free_list</span><span class="p">;</span>
+    <span class="n">page_free_list</span> <span class="o">=</span> <span class="n">result</span><span class="o">-&gt;</span><span class="n">pp_link</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">alloc_flags</span> <span class="o">&amp;</span> <span class="n">ALLOC_ZERO</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">memset</span><span class="p">(</span><span class="n">page2kva</span><span class="p">(</span><span class="n">result</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">PGSIZE</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="n">result</span><span class="o">-&gt;</span><span class="n">pp_link</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">result</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>分析page_free()函数</p>
+
+<p>代码如下:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="k">if</span><span class="p">(</span><span class="n">pp</span><span class="o">-&gt;</span><span class="n">pp_ref</span> <span class="o">!=</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">pp</span><span class="o">-&gt;</span><span class="n">pp_link</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"You can't free this page"</span><span class="p">);</span>
+    <span class="n">pp</span><span class="o">-&gt;</span><span class="n">pp_link</span> <span class="o">=</span> <span class="n">page_free_list</span><span class="p">;</span>
+    <span class="n">page_free_list</span> <span class="o">=</span> <span class="n">pp</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>做完这里，使用命令<code class="language-plaintext highlighter-rouge">make qemu-nox</code>将出现如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">check_page_free_list</span><span class="p">()</span> <span class="n">succeeded</span><span class="o">!</span>
+<span class="n">check_page_alloc</span><span class="p">()</span> <span class="n">succeeded</span><span class="o">!</span>
+</code></pre></div></div>
+
+<h2 id="exercise-4">Exercise 4</h2>
+
+<p>pgdir_walk()函数查找线性地址的pte，并返回。如果page table不在内存中，会分配一页用来存储page table,代码如下:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">pte_t</span> <span class="o">*</span>
+<span class="nf">pgdir_walk</span><span class="p">(</span><span class="n">pde_t</span> <span class="o">*</span><span class="n">pgdir</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">va</span><span class="p">,</span> <span class="kt">int</span> <span class="n">create</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Fill this function in</span>
+    <span class="n">pde_t</span><span class="o">*</span> <span class="n">pde</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">pgdir</span><span class="p">[</span><span class="n">PDX</span><span class="p">(</span><span class="n">va</span><span class="p">)];</span>
+    <span class="n">pte_t</span><span class="o">*</span> <span class="n">pt</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="k">if</span><span class="p">(</span><span class="n">pde</span> <span class="o">!=</span> <span class="nb">NULL</span> <span class="o">&amp;&amp;</span> <span class="p">((</span><span class="o">*</span><span class="n">pde</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">PTE_P</span><span class="p">))</span>
+        <span class="n">pt</span> <span class="o">=</span> <span class="p">(</span><span class="n">pte_t</span><span class="o">*</span><span class="p">)</span><span class="n">KADDR</span><span class="p">(</span><span class="n">PTE_ADDR</span><span class="p">(</span><span class="o">*</span><span class="n">pde</span><span class="p">));</span>
+    <span class="k">else</span> <span class="k">if</span><span class="p">(</span><span class="n">create</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="k">struct</span> <span class="n">PageInfo</span> <span class="o">*</span><span class="n">page</span> <span class="o">=</span> <span class="n">page_alloc</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span> <span class="c1">//1代表将内存单元初始化为零，这里分配一页内存用来存储page table</span>
+        <span class="k">if</span><span class="p">(</span><span class="n">page</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+        <span class="k">else</span> <span class="p">{</span>
+            <span class="n">page</span><span class="o">-&gt;</span><span class="n">pp_ref</span><span class="o">++</span><span class="p">;</span>
+            <span class="o">*</span><span class="n">pde</span> <span class="o">=</span> <span class="n">page2pa</span><span class="p">(</span><span class="n">page</span><span class="p">)</span> <span class="o">|</span> <span class="n">PTE_P</span> <span class="o">|</span> <span class="n">PTE_W</span> <span class="o">|</span> <span class="n">PTE_U</span><span class="p">;</span>
+            <span class="n">pt</span> <span class="o">=</span> <span class="p">(</span><span class="n">pte_t</span><span class="o">*</span><span class="p">)</span><span class="n">KADDR</span><span class="p">(</span><span class="n">PTE_ADDR</span><span class="p">(</span><span class="o">*</span><span class="n">pde</span><span class="p">));</span>
+        <span class="p">}</span>
+    <span class="p">}</span> <span class="k">else</span>
+        <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="k">return</span> <span class="o">&amp;</span><span class="n">pt</span><span class="p">[</span><span class="n">PTX</span><span class="p">(</span><span class="n">va</span><span class="p">)];</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>该函数将物理页和页表条目关联，boot_map_region函数代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">// Fill this function in</span>
+    <span class="k">for</span><span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span> <span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">size</span> <span class="p">;</span> <span class="n">i</span><span class="o">+=</span><span class="n">PGSIZE</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">pte_t</span> <span class="o">*</span><span class="n">page</span> <span class="o">=</span> <span class="n">pgdir_walk</span><span class="p">(</span><span class="n">pgdir</span><span class="p">,</span> <span class="p">(</span><span class="k">const</span> <span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">va</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+        <span class="o">*</span><span class="n">page</span> <span class="o">=</span> <span class="n">pa</span> <span class="o">|</span> <span class="n">perm</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">;</span>
+        <span class="n">va</span> <span class="o">+=</span> <span class="n">PGSIZE</span><span class="p">;</span>
+        <span class="n">pa</span> <span class="o">+=</span> <span class="n">PGSIZE</span><span class="p">;</span>
+    <span class="p">}</span>
+</code></pre></div></div>
+
+<p>page_insert函数代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span>
+<span class="nf">page_insert</span><span class="p">(</span><span class="n">pde_t</span> <span class="o">*</span><span class="n">pgdir</span><span class="p">,</span> <span class="k">struct</span> <span class="n">PageInfo</span> <span class="o">*</span><span class="n">pp</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">va</span><span class="p">,</span> <span class="kt">int</span> <span class="n">perm</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Fill this function in</span>
+    <span class="n">pte_t</span><span class="o">*</span> <span class="n">pte</span> <span class="o">=</span> <span class="n">pgdir_walk</span><span class="p">(</span><span class="n">pgdir</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+
+    <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">pte</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">E_NO_MEM</span><span class="p">;</span>
+
+    <span class="p">(</span><span class="n">pp</span><span class="o">-&gt;</span><span class="n">pp_ref</span><span class="p">)</span><span class="o">++</span><span class="p">;</span> <span class="c1">//这个位置不能与下面换，因为pp指向的物理页可以va地址指向的页可能一样，会导致pp的信息被删除</span>
+
+    <span class="k">if</span><span class="p">((</span><span class="o">*</span><span class="n">pte</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">PTE_P</span><span class="p">)</span> <span class="c1">//pte已经有指向一个页，需要将*pte=0，并且将页的引用减一</span>
+        <span class="n">page_remove</span><span class="p">(</span><span class="n">pgdir</span><span class="p">,</span> <span class="n">va</span><span class="p">);</span>
+
+    <span class="o">*</span><span class="n">pte</span> <span class="o">=</span> <span class="n">page2pa</span><span class="p">(</span><span class="n">pp</span><span class="p">)</span> <span class="o">|</span> <span class="n">perm</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">;</span><span class="c1">//将page的地址放入pte中，并且设置权限</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>page_lookup函数如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">PageInfo</span> <span class="o">*</span>
+<span class="nf">page_lookup</span><span class="p">(</span><span class="n">pde_t</span> <span class="o">*</span><span class="n">pgdir</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">va</span><span class="p">,</span> <span class="n">pte_t</span> <span class="o">**</span><span class="n">pte_store</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Fill this function in</span>
+    <span class="n">pte_t</span><span class="o">*</span> <span class="n">pte</span> <span class="o">=</span> <span class="n">pgdir_walk</span><span class="p">(</span><span class="n">pgdir</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">pte</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span><span class="p">(</span><span class="n">pte_store</span><span class="p">)</span>
+            <span class="o">*</span><span class="n">pte_store</span> <span class="o">=</span> <span class="n">pte</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">pa2page</span><span class="p">(</span><span class="n">PTE_ADDR</span><span class="p">(</span><span class="o">*</span><span class="n">pte</span><span class="p">));</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>page_remove函数代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span> <span class="nf">page_remove</span><span class="p">(</span><span class="n">pde_t</span> <span class="o">*</span><span class="n">pgdir</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">va</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Fill this function in</span>
+    <span class="n">pte_t</span> <span class="o">*</span><span class="n">pte</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">PageInfo</span><span class="o">*</span> <span class="n">page</span> <span class="o">=</span> <span class="n">page_lookup</span><span class="p">(</span><span class="n">pgdir</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pte</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">page</span><span class="p">)</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="n">page_decref</span><span class="p">(</span><span class="n">page</span><span class="p">);</span> <span class="c1">//page_decref函数实现将page的引用减一，</span>
+    <span class="c1">//如果page的引用为零，则会回收page，将page加入page_free_list中</span>
+    <span class="p">(</span><span class="o">*</span><span class="n">pte</span><span class="p">)</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">tlb_invalidate</span><span class="p">(</span><span class="n">pgdir</span><span class="p">,</span> <span class="n">va</span><span class="p">);</span> <span class="c1">//将tlb中有关这个虚拟地址的物理地址缓存失效</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>做完这里，使用命令<code class="language-plaintext highlighter-rouge">make qemu-nox</code>将出现如下：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>check_page<span class="o">()</span> succeeded!
+</code></pre></div></div>
+
+<h2 id="exercise-5">Exercise 5</h2>
+
+<p>第一部分：</p>
+
+<p>由于参数size必须是PGSIZE对齐，所以需要使用ROUNDUP函数</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">boot_map_region</span><span class="p">(</span><span class="n">kern_pgdir</span><span class="p">,</span> <span class="n">UPAGES</span><span class="p">,</span> <span class="n">PTSIZE</span><span class="p">,</span> <span class="n">PADDR</span><span class="p">(</span><span class="n">pages</span><span class="p">),</span> <span class="n">PTE_U</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>第二部分：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">boot_map_region</span><span class="p">(</span><span class="n">kern_pgdir</span><span class="p">,</span> <span class="n">KSTACKTOP</span> <span class="o">-</span> <span class="n">KSTKSIZE</span><span class="p">,</span> <span class="n">KSTKSIZE</span><span class="p">,</span> <span class="n">PADDR</span><span class="p">(</span><span class="n">bootstack</span><span class="p">),</span> <span class="n">PTE_W</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>第三部分：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">boot_map_region</span><span class="p">(</span><span class="n">kern_pgdir</span><span class="p">,</span> <span class="n">KERNBASE</span><span class="p">,</span> <span class="mh">0xffffffff</span> <span class="o">-</span> <span class="n">KERNBASE</span><span class="p">,</span> <span class="mh">0x0</span><span class="p">,</span> <span class="n">PTE_W</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>Question：</p>
+
+<ol>
+  <li>
+    <p>简单</p>
+  </li>
+  <li>
+    <p>页的权限位</p>
+  </li>
+  <li>
+    <p>256M，因为只能映射这么大的内存</p>
+  </li>
+  <li>
+    <p>65 * PGSIZE，1页kern_pgdir,64页page table</p>
+  </li>
+  <li>
+    <p>call i386_init命令实现了从低地址到高地址的跳转。低地址也被映射到相应物理地址，所以访问低地址也有效；要这么做是因为有部分指令仍然位于低地址。</p>
+  </li>
+</ol>
+
+<p>测试的时候记得删除下列代码：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Remove this line when you're ready to test this function.</span>
+<span class="n">panic</span><span class="p">(</span><span class="s">"mem_init: This function is not finished</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+</code></pre></div></div>
+:ET

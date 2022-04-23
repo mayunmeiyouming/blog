@@ -1,0 +1,343 @@
+I"��<h3 id="spring-的核心包">Spring 的核心包</h3>
+
+<p><code class="language-plaintext highlighter-rouge">spring-beans spring-context spring-core spring-expression</code></p>
+
+<h3 id="proxy-代理">Proxy 代理</h3>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">static</span> <span class="n">hwhw</span> <span class="nf">createProxyTest</span><span class="o">()</span> <span class="o">{</span>
+    <span class="kd">final</span> <span class="nc">ProxyTest</span> <span class="n">proxyTest</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ProxyTest</span><span class="o">();</span>
+
+    <span class="c1">//hwhw是接口,必须使用接口</span>
+    <span class="n">hwhw</span> <span class="n">proxyT</span> <span class="o">=</span> <span class="o">(</span><span class="n">hwhw</span><span class="o">)</span> <span class="nc">Proxy</span><span class="o">.</span><span class="na">newProxyInstance</span><span class="o">(</span>
+                <span class="nc">ProxyFactory</span><span class="o">.</span><span class="na">class</span><span class="o">.</span><span class="na">getClassLoader</span><span class="o">(),</span>
+                <span class="n">proxyTest</span><span class="o">.</span><span class="na">getClass</span><span class="o">().</span><span class="na">getInterfaces</span><span class="o">(),</span>
+                <span class="k">new</span> <span class="nf">InvocationHandler</span><span class="o">()</span> <span class="o">{</span>
+                    <span class="nd">@Override</span>
+                    <span class="kd">public</span> <span class="nc">Object</span> <span class="nf">invoke</span><span class="o">(</span><span class="nc">Object</span> <span class="n">proxy</span><span class="o">,</span> <span class="nc">Method</span> <span class="n">method</span><span class="o">,</span> <span class="nc">Object</span><span class="o">[]</span> <span class="n">args</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">Throwable</span> <span class="o">{</span>
+                        <span class="nc">Object</span> <span class="n">obj</span> <span class="o">=</span> <span class="n">method</span><span class="o">.</span><span class="na">invoke</span><span class="o">(</span><span class="n">proxyTest</span><span class="o">,</span> <span class="n">args</span><span class="o">);</span>
+                        <span class="k">return</span> <span class="n">obj</span><span class="o">;</span>
+                    <span class="o">}</span>
+                <span class="o">}</span>
+    <span class="o">);</span>
+
+    <span class="k">return</span> <span class="n">proxyT</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="cglib代理">cglib代理</h3>
+
+<p>cglib可以没有接口</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">static</span> <span class="nc">ProxyClass2</span> <span class="nf">createProxyClass</span><span class="o">()</span> <span class="o">{</span>
+    <span class="kd">final</span> <span class="nc">ProxyClass2</span> <span class="n">proxyClass2</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ProxyClass2</span><span class="o">();</span>
+
+    <span class="nc">Enhancer</span> <span class="n">enhancer</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Enhancer</span><span class="o">();</span>
+    <span class="n">enhancer</span><span class="o">.</span><span class="na">setSuperclass</span><span class="o">(</span><span class="n">proxyClass2</span><span class="o">.</span><span class="na">getClass</span><span class="o">());</span>
+    <span class="n">enhancer</span><span class="o">.</span><span class="na">setCallback</span><span class="o">(</span><span class="k">new</span> <span class="nc">MethodInterceptor</span><span class="o">()</span> <span class="o">{</span>
+        <span class="nd">@Override</span>
+        <span class="kd">public</span> <span class="nc">Object</span> <span class="nf">intercept</span><span class="o">(</span><span class="nc">Object</span> <span class="n">o</span><span class="o">,</span> <span class="nc">Method</span> <span class="n">method</span><span class="o">,</span> <span class="nc">Object</span><span class="o">[]</span> <span class="n">objects</span><span class="o">,</span> <span class="nc">MethodProxy</span> <span class="n">methodProxy</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">Throwable</span> <span class="o">{</span>
+            <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"被拦截了"</span><span class="o">);</span>
+            <span class="k">return</span> <span class="n">methodProxy</span><span class="o">.</span><span class="na">invokeSuper</span><span class="o">(</span><span class="n">o</span><span class="o">,</span> <span class="n">objects</span><span class="o">);</span>
+        <span class="o">}</span>
+    <span class="o">});</span>
+
+    <span class="k">return</span> <span class="o">(</span><span class="nc">ProxyClass2</span><span class="o">)</span> <span class="n">enhancer</span><span class="o">.</span><span class="na">create</span><span class="o">();</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="spring-开启注解">Spring 开启注解</h3>
+
+<ol>
+  <li>beans参数</li>
+</ol>
+
+<p><code class="language-plaintext highlighter-rouge">xmlns:context="http://www.springframework.org/schema/context"</code></p>
+
+<ol>
+  <li>beans参数的xsi:schemaLocation</li>
+</ol>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>http://www.springframework.org/schema/context
+
+http://www.springframework.org/schema/context/spring-context.xsd"
+</code></pre></div></div>
+
+<ol>
+  <li>bean配置</li>
+</ol>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;context:annotation-config&gt;&lt;/context:annotation-config&gt;</span>
+<span class="nt">&lt;context:component-scan</span> <span class="na">base-package=</span><span class="s">"Service"</span><span class="nt">&gt;&lt;/context:component-scan&gt;</span>
+<span class="nt">&lt;context:component-scan</span> <span class="na">base-package=</span><span class="s">"Dao"</span><span class="nt">&gt;&lt;/context:component-scan&gt;</span>
+</code></pre></div></div>
+
+<h3 id="spring-aop-alliance">Spring AOP Alliance</h3>
+
+<p><code class="language-plaintext highlighter-rouge">spring-aop</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">aopalliance</code></p>
+
+<h4 id="半自动aop">半自动AOP</h4>
+
+<p>bean配置:</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"hwhw"</span> <span class="na">class=</span><span class="s">"Service.ProxyTest"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+<span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"MyAspect"</span> <span class="na">class=</span><span class="s">"Service.MyAspect"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+<span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"hwhwProxy"</span> <span class="na">class=</span><span class="s">"org.springframework.aop.framework.ProxyFactoryBean"</span><span class="nt">&gt;</span>
+<span class="c">&lt;!--&lt;property name="interfaces" value="Service.hwhw"&gt;&lt;/property&gt;--&gt;</span>
+<span class="c">&lt;!-- interfaces是接口 --&gt;</span>
+<span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"target"</span> <span class="na">ref=</span><span class="s">"hwhw"</span><span class="nt">&gt;&lt;/property&gt;</span>
+<span class="c">&lt;!-- target为目标类 --&gt;</span>
+<span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"interceptorNames"</span> <span class="na">value=</span><span class="s">"MyAspect"</span><span class="nt">&gt;&lt;/property&gt;</span>
+<span class="c">&lt;!-- interceptorNames是切面类,这个不能使用ref,必须使用value --&gt;</span>
+<span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"optimize"</span> <span class="na">value=</span><span class="s">"true"</span><span class="nt">&gt;&lt;/property&gt;</span>
+<span class="c">&lt;!-- optimize参数的value为true时,使用cglib生成代理 --&gt;</span>
+<span class="nt">&lt;/bean&gt;</span>
+</code></pre></div></div>
+
+<p>切面类 案例:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">class</span> <span class="nc">MyAspect</span> <span class="kd">implements</span> <span class="nc">MethodInterceptor</span> <span class="o">{</span>
+    <span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="nc">Object</span> <span class="nf">invoke</span><span class="o">(</span><span class="nc">MethodInvocation</span> <span class="n">methodInvocation</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">Throwable</span> <span class="o">{</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"开启"</span><span class="o">);</span>
+        <span class="nc">Object</span> <span class="n">odj</span> <span class="o">=</span> <span class="n">methodInvocation</span><span class="o">.</span><span class="na">proceed</span><span class="o">();</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"提交"</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">odj</span><span class="o">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h4 id="全自动aop">全自动AOP</h4>
+
+<p>切面类同上</p>
+
+<p>另加: <code class="language-plaintext highlighter-rouge">aspectjweaver</code></p>
+
+<ol>
+  <li>beans配置</li>
+</ol>
+
+<p><code class="language-plaintext highlighter-rouge">xmlns:aop="http://www.springframework.org/schema/aop"</code></p>
+
+<ol>
+  <li>beans参数的xsi:schemaLocation</li>
+</ol>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>http://www.springframework.org/schema/aop
+
+http://www.springframework.org/schema/aop/spring-aop.xsd"
+</code></pre></div></div>
+
+<p>bean配置:</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"proxyTest"</span> <span class="na">class=</span><span class="s">"Service.ProxyTest"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+<span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"MyAspect"</span> <span class="na">class=</span><span class="s">"Service.MyAspect"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+<span class="c">&lt;!-- proxy-target-class="true" 表示使用cglib --&gt;</span>
+<span class="nt">&lt;aop:config</span> <span class="na">proxy-target-class=</span><span class="s">"true"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;aop:pointcut</span> <span class="na">id=</span><span class="s">"Mypointcut"</span> <span class="na">expression=</span><span class="s">"execution(* Service.*.*(..))"</span><span class="nt">/&gt;</span>
+    <span class="c">&lt;!-- 第一个 * 代表返回值类型,Service 表示包,Service后面的第一个星表示类,第二个星表示方法, (..) 代表方法参数 --&gt;</span>
+    <span class="nt">&lt;aop:advisor</span> <span class="na">advice-ref=</span><span class="s">"MyAspect"</span> <span class="na">pointcut-ref=</span><span class="s">"Mypointcut"</span><span class="nt">&gt;&lt;/aop:advisor&gt;</span>
+<span class="nt">&lt;/aop:config&gt;</span>
+</code></pre></div></div>
+
+<h4 id="aspectj">AspectJ</h4>
+
+<p><code class="language-plaintext highlighter-rouge">aspectjweaver spring-aspects</code></p>
+
+<p>bean配置:</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"proxyTest"</span> <span class="na">class=</span><span class="s">"Service.ProxyTest"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+<span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"Aspect1"</span> <span class="na">class=</span><span class="s">"Service.Aspect1"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+<span class="nt">&lt;aop:config</span> <span class="na">proxy-target-class=</span><span class="s">"true"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;aop:aspect</span> <span class="na">ref=</span><span class="s">"Aspect1"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;aop:pointcut</span> <span class="na">id=</span><span class="s">"MyPointCut"</span> <span class="na">expression=</span><span class="s">"execution(* Service.*.*(..))"</span><span class="nt">/&gt;</span>
+
+
+        <span class="nt">&lt;aop:around</span> <span class="na">method=</span><span class="s">"Round"</span> <span class="na">pointcut-ref=</span><span class="s">"MyPointCut"</span><span class="nt">&gt;&lt;/aop:around&gt;</span>
+
+        <span class="nt">&lt;aop:after</span> <span class="na">method=</span><span class="s">"afterReturnAspect"</span> <span class="na">pointcut-ref=</span><span class="s">"MyPointCut"</span><span class="nt">&gt;&lt;/aop:after&gt;</span>
+        <span class="nt">&lt;aop:after</span> <span class="na">method=</span><span class="s">"afterAspect"</span> <span class="na">pointcut-ref=</span><span class="s">"MyPointCut"</span><span class="nt">&gt;&lt;/aop:after&gt;</span>
+        <span class="nt">&lt;aop:before</span> <span class="na">method=</span><span class="s">"beforeAspect"</span> <span class="na">pointcut-ref=</span><span class="s">"MyPointCut"</span><span class="nt">&gt;&lt;/aop:before&gt;</span>
+        <span class="nt">&lt;aop:after-throwing</span> <span class="na">method=</span><span class="s">"myThrowing"</span> <span class="na">pointcut-ref=</span><span class="s">"MyPointCut"</span> <span class="na">throwing=</span><span class="s">"e"</span><span class="nt">&gt;&lt;/aop:after-throwing&gt;</span>
+    <span class="nt">&lt;/aop:aspect&gt;</span>
+<span class="nt">&lt;/aop:config&gt;</span>
+</code></pre></div></div>
+
+<p>Aspect1:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">class</span> <span class="nc">Aspect1</span> <span class="o">{</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">beforeAspect</span><span class="o">(){</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"beforeAspect"</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">afterAspect</span><span class="o">(</span><span class="nc">JoinPoint</span> <span class="n">joinPoint</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"afterAspect"</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">afterReturnAspect</span><span class="o">(</span><span class="nc">JoinPoint</span> <span class="n">joinPoint</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"afterReturnAspect"</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="nc">Object</span> <span class="nf">Round</span><span class="o">(</span><span class="nc">ProceedingJoinPoint</span> <span class="n">proceedingJoinPoint</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">Throwable</span> <span class="o">{</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"开始"</span><span class="o">);</span>
+        <span class="nc">Object</span> <span class="n">res</span> <span class="o">=</span> <span class="n">proceedingJoinPoint</span><span class="o">.</span><span class="na">proceed</span><span class="o">();</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"结束"</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">res</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">myThrowing</span> <span class="o">(</span><span class="nc">JoinPoint</span> <span class="n">joinPoint</span><span class="o">,</span> <span class="nc">Throwable</span> <span class="n">e</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"error"</span><span class="o">);</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h5 id="aspectj注解">AspectJ注解</h5>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;context:component-scan</span> <span class="na">base-package=</span><span class="s">"Service"</span><span class="nt">&gt;&lt;/context:component-scan&gt;</span>
+<span class="nt">&lt;aop:aspectj-autoproxy&gt;&lt;/aop:aspectj-autoproxy&gt;</span>
+<span class="nt">&lt;aop:config</span> <span class="na">proxy-target-class=</span><span class="s">"true"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;aop:aspect</span> <span class="na">ref=</span><span class="s">"aspect1"</span><span class="nt">&gt;&lt;/aop:aspect&gt;</span>
+<span class="nt">&lt;/aop:config&gt;</span>
+</code></pre></div></div>
+
+<p>Aspect类:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Component</span>
+<span class="nd">@Aspect</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">Aspect1</span> <span class="o">{</span>
+
+    <span class="nd">@Pointcut</span><span class="o">(</span><span class="s">"execution(* Service.ProxyTest.*(..))"</span><span class="o">)</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">myPoint</span><span class="o">(){}</span>
+
+    <span class="nd">@Before</span><span class="o">(</span><span class="s">"myPoint()"</span><span class="o">)</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">beforeAspect</span><span class="o">(){</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"beforeAspect"</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">afterAspect</span><span class="o">()</span> <span class="o">{</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"afterAspect"</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="nd">@AfterReturning</span><span class="o">(</span><span class="n">pointcut</span> <span class="o">=</span> <span class="s">"myPoint()"</span><span class="o">,</span> <span class="n">returning</span> <span class="o">=</span> <span class="s">"res"</span><span class="o">)</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">afterReturnAspect</span><span class="o">(</span><span class="nc">JoinPoint</span> <span class="n">joinPoint</span><span class="o">,</span><span class="nc">Object</span> <span class="n">res</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"afterReturnAspect "</span> <span class="o">+</span> <span class="n">res</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="nc">Object</span> <span class="nf">Round</span><span class="o">(</span><span class="nc">ProceedingJoinPoint</span> <span class="n">proceedingJoinPoint</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">Throwable</span> <span class="o">{</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"开始"</span><span class="o">);</span>
+        <span class="nc">Object</span> <span class="n">res</span> <span class="o">=</span> <span class="n">proceedingJoinPoint</span><span class="o">.</span><span class="na">proceed</span><span class="o">();</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"结束"</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">res</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">myThrowing</span> <span class="o">(</span><span class="nc">JoinPoint</span> <span class="n">joinPoint</span><span class="o">,</span> <span class="nc">Throwable</span> <span class="n">e</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"error"</span><span class="o">);</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="aop-事物">AOP 事物</h3>
+
+<p>beans 配置:</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;beans</span> <span class="na">xmlns=</span><span class="s">"http://www.springframework.org/schema/beans"</span>
+       <span class="na">xmlns:xsi=</span><span class="s">"http://www.w3.org/2001/XMLSchema-instance"</span>
+       <span class="na">xmlns:context=</span><span class="s">"http://www.springframework.org/schema/context"</span>
+       <span class="na">xmlns:aop=</span><span class="s">"http://www.springframework.org/schema/aop"</span>
+       <span class="na">xmlns:tx=</span><span class="s">"http://www.springframework.org/schema/tx"</span>
+       <span class="na">xsi:schemaLocation=</span><span class="s">"http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context.xsd
+       http://www.springframework.org/schema/tx
+       http://www.springframework.org/schema/tx/spring-tx.xsd
+       http://www.springframework.org/schema/aop
+       http://www.springframework.org/schema/aop/spring-aop.xsd"</span><span class="nt">&gt;</span>
+
+    <span class="nt">&lt;context:property-placeholder</span> <span class="na">location=</span><span class="s">"db.properties"</span><span class="nt">/&gt;</span>
+
+
+    <span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"dataSource"</span> <span class="na">class=</span><span class="s">"com.mchange.v2.c3p0.ComboPooledDataSource"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"driverClass"</span> <span class="na">value=</span><span class="s">"${driverClass}"</span><span class="nt">&gt;&lt;/property&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"jdbcUrl"</span> <span class="na">value=</span><span class="s">"${jdbcUrl}"</span><span class="nt">&gt;&lt;/property&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"user"</span> <span class="na">value=</span><span class="s">"root"</span><span class="nt">&gt;&lt;/property&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"password"</span> <span class="na">value=</span><span class="s">"${password}"</span><span class="nt">&gt;&lt;/property&gt;</span>
+    <span class="nt">&lt;/bean&gt;</span>
+
+    <span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"accountDao"</span> <span class="na">class=</span><span class="s">"dao.impl.AccountDaoImpl"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"dataSource"</span> <span class="na">ref=</span><span class="s">"dataSource"</span><span class="nt">&gt;&lt;/property&gt;</span>
+    <span class="nt">&lt;/bean&gt;</span>
+
+    <span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"txManager"</span> <span class="na">class=</span><span class="s">"org.springframework.jdbc.datasource.DataSourceTransactionManager"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"dataSource"</span> <span class="na">ref=</span><span class="s">"dataSource"</span><span class="nt">&gt;&lt;/property&gt;</span>
+    <span class="nt">&lt;/bean&gt;</span>
+
+    <span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"accountService"</span> <span class="na">class=</span><span class="s">"Service.Impl.AccountServiceImpl"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"accountDao"</span> <span class="na">ref=</span><span class="s">"accountDao"</span><span class="nt">&gt;&lt;/property&gt;</span>
+    <span class="nt">&lt;/bean&gt;</span>
+
+    <span class="nt">&lt;tx:advice</span> <span class="na">id=</span><span class="s">"txAdvice"</span> <span class="na">transaction-manager=</span><span class="s">"txManager"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;tx:attributes&gt;</span>
+            <span class="nt">&lt;tx:method</span> <span class="na">name=</span><span class="s">"transfer"</span> <span class="na">propagation=</span><span class="s">"REQUIRED"</span> <span class="na">isolation=</span><span class="s">"DEFAULT"</span><span class="nt">/&gt;</span>
+            <span class="c">&lt;!-- name是方法名,是需要事务处理的方法 --&gt;</span>
+        <span class="nt">&lt;/tx:attributes&gt;</span>
+    <span class="nt">&lt;/tx:advice&gt;</span>
+
+    <span class="nt">&lt;aop:config&gt;</span>
+        <span class="nt">&lt;aop:pointcut</span> <span class="na">id=</span><span class="s">"myPointcut"</span> <span class="na">expression=</span><span class="s">"execution(* Service..*(..))"</span><span class="nt">/&gt;</span>
+        <span class="nt">&lt;aop:advisor</span> <span class="na">advice-ref=</span><span class="s">"txAdvice"</span> <span class="na">pointcut-ref=</span><span class="s">"myPointcut"</span><span class="nt">&gt;&lt;/aop:advisor&gt;</span>
+    <span class="nt">&lt;/aop:config&gt;</span>
+<span class="nt">&lt;/beans&gt;</span>
+</code></pre></div></div>
+
+<h3 id="aop-事物-注解">AOP 事物 注解</h3>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>
+<span class="nt">&lt;beans</span> <span class="na">xmlns=</span><span class="s">"http://www.springframework.org/schema/beans"</span>
+       <span class="na">xmlns:xsi=</span><span class="s">"http://www.w3.org/2001/XMLSchema-instance"</span>
+       <span class="na">xmlns:context=</span><span class="s">"http://www.springframework.org/schema/context"</span>
+       <span class="na">xmlns:aop=</span><span class="s">"http://www.springframework.org/schema/aop"</span>
+       <span class="na">xmlns:tx=</span><span class="s">"http://www.springframework.org/schema/tx"</span>
+       <span class="na">xsi:schemaLocation=</span><span class="s">"http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context.xsd
+       http://www.springframework.org/schema/tx
+       http://www.springframework.org/schema/tx/spring-tx.xsd
+       http://www.springframework.org/schema/aop
+       http://www.springframework.org/schema/aop/spring-aop.xsd"</span><span class="nt">&gt;</span>
+
+    <span class="nt">&lt;context:property-placeholder</span> <span class="na">location=</span><span class="s">"db.properties"</span><span class="nt">/&gt;</span>
+
+
+    <span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"dataSource"</span> <span class="na">class=</span><span class="s">"com.mchange.v2.c3p0.ComboPooledDataSource"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"driverClass"</span> <span class="na">value=</span><span class="s">"${driverClass}"</span><span class="nt">&gt;&lt;/property&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"jdbcUrl"</span> <span class="na">value=</span><span class="s">"${jdbcUrl}"</span><span class="nt">&gt;&lt;/property&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"user"</span> <span class="na">value=</span><span class="s">"root"</span><span class="nt">&gt;&lt;/property&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"password"</span> <span class="na">value=</span><span class="s">"${password}"</span><span class="nt">&gt;&lt;/property&gt;</span>
+    <span class="nt">&lt;/bean&gt;</span>
+
+    <span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"accountDao"</span> <span class="na">class=</span><span class="s">"dao.impl.AccountDaoImpl"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"dataSource"</span> <span class="na">ref=</span><span class="s">"dataSource"</span><span class="nt">&gt;&lt;/property&gt;</span>
+    <span class="nt">&lt;/bean&gt;</span>
+
+    <span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"accountService"</span> <span class="na">class=</span><span class="s">"Service.Impl.AccountServiceImpl"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"accountDao"</span> <span class="na">ref=</span><span class="s">"accountDao"</span><span class="nt">&gt;&lt;/property&gt;</span>
+    <span class="nt">&lt;/bean&gt;</span>
+
+    <span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"txManager"</span> <span class="na">class=</span><span class="s">"org.springframework.jdbc.datasource.DataSourceTransactionManager"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"dataSource"</span> <span class="na">ref=</span><span class="s">"dataSource"</span><span class="nt">&gt;&lt;/property&gt;</span>
+    <span class="nt">&lt;/bean&gt;</span>
+
+    <span class="nt">&lt;tx:annotation-driven</span> <span class="na">transaction-manager=</span><span class="s">"txManager"</span> <span class="nt">&gt;&lt;/tx:annotation-driven&gt;</span>
+<span class="nt">&lt;/beans&gt;</span>
+</code></pre></div></div>
+:ET

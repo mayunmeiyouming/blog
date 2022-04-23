@@ -1,0 +1,166 @@
+I"�c<h3 id="jquery提交普通表单使用serialize">JQuery提交普通表单,使用serialize()</h3>
+
+<p>使用<code class="language-plaintext highlighter-rouge">fastjson.jar</code>对返回的数据转换成json数据</p>
+
+<p>form表单:</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;form</span> <span class="na">id=</span><span class="s">"form"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;input</span> <span class="na">type=</span><span class="s">"number"</span> <span class="na">name=</span><span class="s">"page_init"</span> <span class="na">id=</span><span class="s">"page_init"</span> <span class="na">min=</span><span class="s">"0"</span> <span class="na">step=</span><span class="s">"1"</span> <span class="na">max=</span><span class="s">"26"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;input</span> <span class="na">type=</span><span class="s">"number"</span> <span class="na">name=</span><span class="s">"page_end"</span> <span class="na">id=</span><span class="s">"page_end"</span> <span class="na">min=</span><span class="s">"0"</span> <span class="na">step=</span><span class="s">"1"</span> <span class="na">max=</span><span class="s">"26"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;input</span> <span class="na">type=</span><span class="s">"button"</span> <span class="na">id=</span><span class="s">"removeButton"</span> <span class="na">value=</span><span class="s">"remove"</span> <span class="nt">&gt;</span>
+<span class="nt">&lt;/form&gt;</span>
+</code></pre></div></div>
+
+<p>JQuery提交数据:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">$</span><span class="p">.</span><span class="nx">ajax</span><span class="p">({</span>
+    <span class="na">url</span><span class="p">:</span> <span class="dl">'</span><span class="s1">&lt;%= request.getContextPath() %&gt;/pdfRemove</span><span class="dl">'</span><span class="p">,</span>
+    <span class="na">type</span><span class="p">:</span> <span class="dl">'</span><span class="s1">post</span><span class="dl">'</span><span class="p">,</span>
+    <span class="na">cache</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+    <span class="na">data</span><span class="p">:</span> <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#form</span><span class="dl">"</span><span class="p">).</span><span class="nx">serialize</span><span class="p">(),</span>
+    <span class="na">dataType</span><span class="p">:</span> <span class="dl">"</span><span class="s2">json</span><span class="dl">"</span><span class="p">,</span>
+    <span class="na">processData</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+
+    <span class="na">success</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">data</span><span class="p">){</span>
+        <span class="nx">alert</span><span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">status</span><span class="p">);</span>
+    <span class="p">},</span>
+    <span class="na">error</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">){</span>
+        <span class="nx">alert</span><span class="p">(</span><span class="dl">"</span><span class="s2">error</span><span class="dl">"</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<p>注意:由于使用FormData函数处理了数据,所以<code class="language-plaintext highlighter-rouge">processData</code>必须设置为<code class="language-plaintext highlighter-rouge">false</code>.<code class="language-plaintext highlighter-rouge">processData</code>的含义为处理数据,默认为<code class="language-plaintext highlighter-rouge">true</code>,将发送的数据将被转换为对象.</p>
+
+<p>不知为何FormData函数处理普通表单,根本发送不出去…</p>
+
+<p>Servlet处理数据:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">JSONObject</span> <span class="nx">jsonObject</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">JSONObject</span><span class="p">();</span>
+<span class="nx">request</span><span class="p">.</span><span class="nx">setCharacterEncoding</span><span class="p">(</span><span class="dl">"</span><span class="s2">utf-8</span><span class="dl">"</span><span class="p">);</span>
+<span class="nx">HttpSession</span> <span class="nx">se</span> <span class="o">=</span> <span class="nx">request</span><span class="p">.</span><span class="nx">getSession</span><span class="p">();</span>
+<span class="nb">String</span> <span class="nx">path</span> <span class="o">=</span> <span class="p">(</span><span class="nb">String</span><span class="p">)</span> <span class="nx">se</span><span class="p">.</span><span class="nx">getAttribute</span><span class="p">(</span><span class="dl">"</span><span class="s2">filePath</span><span class="dl">"</span><span class="p">);</span>
+<span class="nx">int</span> <span class="nx">page_init</span> <span class="o">=</span> <span class="nx">Integer</span><span class="p">.</span><span class="nx">valueOf</span><span class="p">(</span><span class="nx">request</span><span class="p">.</span><span class="nx">getParameter</span><span class="p">(</span><span class="dl">"</span><span class="s2">page_init</span><span class="dl">"</span><span class="p">));</span>
+<span class="nx">int</span> <span class="nx">page_end</span> <span class="o">=</span> <span class="nx">Integer</span><span class="p">.</span><span class="nx">valueOf</span><span class="p">(</span><span class="nx">request</span><span class="p">.</span><span class="nx">getParameter</span><span class="p">(</span><span class="dl">"</span><span class="s2">page_end</span><span class="dl">"</span><span class="p">));</span>
+<span class="nx">System</span><span class="p">.</span><span class="nx">out</span><span class="p">.</span><span class="nx">println</span><span class="p">(</span><span class="dl">"</span><span class="s2">path:</span><span class="dl">"</span><span class="o">+</span><span class="nx">path</span><span class="o">+</span><span class="dl">"</span><span class="s2">,page_init:</span><span class="dl">"</span><span class="o">+</span><span class="nx">page_init</span><span class="o">+</span><span class="dl">"</span><span class="s2">,page_end:</span><span class="dl">"</span><span class="o">+</span><span class="nx">page_end</span><span class="p">);</span>
+
+<span class="c1">//Pdf.remove(new File(path), page_init, page_end);</span>
+<span class="nx">jsonObject</span><span class="p">.</span><span class="nx">put</span><span class="p">(</span><span class="dl">"</span><span class="s2">status</span><span class="dl">"</span><span class="p">,</span><span class="dl">"</span><span class="s2">成功</span><span class="dl">"</span><span class="p">);</span>
+<span class="nx">System</span><span class="p">.</span><span class="nx">out</span><span class="p">.</span><span class="nx">println</span><span class="p">(</span><span class="nx">jsonObject</span><span class="p">.</span><span class="nx">toString</span><span class="p">());</span>
+<span class="nx">response</span><span class="p">.</span><span class="nx">getOutputStream</span><span class="p">().</span><span class="nx">write</span><span class="p">(</span><span class="nx">jsonObject</span><span class="p">.</span><span class="nx">toString</span><span class="p">().</span><span class="nx">getBytes</span><span class="p">(</span><span class="dl">"</span><span class="s2">utf-8</span><span class="dl">"</span><span class="p">));</span>
+</code></pre></div></div>
+
+<h3 id="jquery提交带有文件的表单使用formdata处理数据">JQuery提交带有文件的表单,使用FormData处理数据</h3>
+
+<p>这里使用了<code class="language-plaintext highlighter-rouge">commons-fileupload.jar</code>来处理接收的数据,使用<code class="language-plaintext highlighter-rouge">fastjson.jar</code>对返回的数据转换成json数据</p>
+
+<p>form表单:</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;form&gt;</span>
+    <span class="nt">&lt;input</span> <span class="na">type=</span><span class="s">"file"</span> <span class="na">name=</span><span class="s">"file"</span> <span class="na">id=</span><span class="s">"file"</span> <span class="nt">&gt;</span>
+    <span class="nt">&lt;input</span> <span class="na">type=</span><span class="s">"button"</span> <span class="na">id=</span><span class="s">"button"</span> <span class="na">value=</span><span class="s">"submit"</span> <span class="nt">&gt;</span>
+<span class="nt">&lt;/form&gt;</span>
+</code></pre></div></div>
+
+<p>JQuery提交数据:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">var</span> <span class="nx">formData</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">FormData</span><span class="p">();</span>
+<span class="nx">formData</span><span class="p">.</span><span class="nx">append</span><span class="p">(</span><span class="dl">'</span><span class="s1">file</span><span class="dl">'</span><span class="p">,</span> <span class="nx">$</span><span class="p">(</span><span class="dl">'</span><span class="s1">#file</span><span class="dl">'</span><span class="p">)[</span><span class="mi">0</span><span class="p">].</span><span class="nx">files</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+<span class="nx">$</span><span class="p">.</span><span class="nx">ajax</span><span class="p">({</span>
+    <span class="na">url</span><span class="p">:</span> <span class="dl">''</span><span class="p">,</span>
+    <span class="na">type</span><span class="p">:</span> <span class="dl">'</span><span class="s1">post</span><span class="dl">'</span><span class="p">,</span>
+    <span class="na">cache</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+    <span class="na">processData</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+    <span class="na">contentType</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+    <span class="na">data</span><span class="p">:</span> <span class="nx">formData</span><span class="p">,</span>
+    <span class="na">dataType</span><span class="p">:</span> <span class="dl">"</span><span class="s2">json</span><span class="dl">"</span><span class="p">,</span>
+    <span class="na">success</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">data</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">data</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">errorFileType</span> <span class="o">==</span> <span class="dl">""</span><span class="p">){</span>
+            <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#page_end</span><span class="dl">"</span><span class="p">).</span><span class="nx">attr</span><span class="p">(</span><span class="dl">"</span><span class="s2">value</span><span class="dl">"</span><span class="p">,</span> <span class="nx">data</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">count</span><span class="p">);</span>
+            <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#page_end</span><span class="dl">"</span><span class="p">).</span><span class="nx">attr</span><span class="p">(</span><span class="dl">"</span><span class="s2">max</span><span class="dl">"</span><span class="p">,</span> <span class="nx">data</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">count</span><span class="p">);</span>
+            <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#page_init</span><span class="dl">"</span><span class="p">).</span><span class="nx">attr</span><span class="p">(</span><span class="dl">"</span><span class="s2">max</span><span class="dl">"</span><span class="p">,</span> <span class="nx">data</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">count</span><span class="p">);</span>
+            <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#removeButton</span><span class="dl">"</span><span class="p">).</span><span class="nx">removeAttr</span><span class="p">(</span><span class="dl">"</span><span class="s2">style</span><span class="dl">"</span><span class="p">);</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="nx">alert</span><span class="p">(</span><span class="nx">data</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">errorFileType</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+    <span class="na">error</span><span class="p">:</span> <span class="kd">function</span><span class="p">(){</span>
+        <span class="nx">alert</span><span class="p">(</span><span class="dl">'</span><span class="s1">未知错误</span><span class="dl">'</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">$('#file')[0].files[0]</code> 这个似乎是最后一个<code class="language-plaintext highlighter-rouge">[0]</code>代表第几个文件,多文件时要注意,具体等以后遇到再说.</p>
+
+<p>当将contentType选项设置为false时，会强制jQuery不要添加Content-Type头，否则边界字符串将会丢失。</p>
+
+<p>Servlet处理数据:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="p">(</span><span class="nx">ServletFileUpload</span><span class="p">.</span><span class="nx">isMultipartContent</span><span class="p">(</span><span class="nx">request</span><span class="p">))</span> <span class="p">{</span>
+    <span class="nx">ServletFileUpload</span> <span class="nx">upload</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">ServletFileUpload</span><span class="p">(</span><span class="k">new</span> <span class="nx">DiskFileItemFactory</span><span class="p">());</span>
+    <span class="nx">upload</span><span class="p">.</span><span class="nx">setHeaderEncoding</span><span class="p">(</span><span class="dl">"</span><span class="s2">UTF-8</span><span class="dl">"</span><span class="p">);</span>
+    <span class="nx">List</span><span class="o">&lt;</span><span class="nx">FileItem</span><span class="o">&gt;</span> <span class="nx">fileItemList</span><span class="p">;</span>
+    <span class="k">try</span> <span class="p">{</span>
+        <span class="nx">fileItemList</span> <span class="o">=</span> <span class="nx">upload</span><span class="p">.</span><span class="nx">parseRequest</span><span class="p">(</span><span class="nx">request</span><span class="p">);</span>
+        <span class="k">for</span><span class="p">(</span><span class="nx">FileItem</span> <span class="na">fileItem</span><span class="p">:</span> <span class="nx">fileItemList</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="nx">fileItem</span><span class="p">.</span><span class="nx">isFormField</span><span class="p">())</span> <span class="p">{</span>
+                <span class="nx">System</span><span class="p">.</span><span class="nx">out</span><span class="p">.</span><span class="nx">println</span><span class="p">(</span><span class="nx">fileItem</span><span class="p">.</span><span class="nx">getFieldName</span><span class="p">()</span> <span class="o">+</span> <span class="dl">"</span><span class="s2">,</span><span class="dl">"</span> <span class="o">+</span> <span class="nx">fileItem</span><span class="p">.</span><span class="nx">getString</span><span class="p">());</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+                <span class="nx">System</span><span class="p">.</span><span class="nx">out</span><span class="p">.</span><span class="nx">println</span><span class="p">(</span><span class="nx">fileItem</span><span class="p">.</span><span class="nx">getFieldName</span><span class="p">());</span>
+                <span class="nb">String</span> <span class="nx">path</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">getInitParameter</span><span class="p">(</span><span class="dl">"</span><span class="s2">path</span><span class="dl">"</span><span class="p">)</span> <span class="o">+</span> <span class="nx">fileItem</span><span class="p">.</span><span class="nx">getName</span><span class="p">();</span>
+                <span class="nx">int</span> <span class="nx">pages</span> <span class="o">=</span> <span class="nx">Pdf</span><span class="p">.</span><span class="nx">calculatePages</span><span class="p">(</span><span class="nx">fileItem</span><span class="p">.</span><span class="nx">getInputStream</span><span class="p">());</span>
+
+                <span class="nx">File</span> <span class="nx">file</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">File</span><span class="p">(</span><span class="nx">path</span><span class="p">);</span>
+                <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">file</span><span class="p">.</span><span class="nx">exists</span><span class="p">())</span> <span class="p">{</span>
+                    <span class="nx">fileItem</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">file</span><span class="p">);</span>
+                <span class="p">}</span>
+
+                <span class="nx">HttpSession</span> <span class="nx">session</span> <span class="o">=</span> <span class="nx">request</span><span class="p">.</span><span class="nx">getSession</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+                <span class="nx">session</span><span class="p">.</span><span class="nx">setAttribute</span><span class="p">(</span><span class="dl">"</span><span class="s2">filePath</span><span class="dl">"</span><span class="p">,</span> <span class="nx">path</span><span class="p">);</span>
+
+
+                <span class="nx">response</span><span class="p">.</span><span class="nx">setCharacterEncoding</span><span class="p">(</span><span class="dl">"</span><span class="s2">utf-8</span><span class="dl">"</span><span class="p">);</span>
+                <span class="nx">JSONObject</span> <span class="nx">jsonObject</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">JSONObject</span><span class="p">();</span>
+                <span class="nx">jsonObject</span><span class="p">.</span><span class="nx">put</span><span class="p">(</span><span class="dl">"</span><span class="s2">count</span><span class="dl">"</span><span class="p">,</span> <span class="nx">pages</span><span class="p">);</span>
+                <span class="nx">jsonObject</span><span class="p">.</span><span class="nx">put</span><span class="p">(</span><span class="dl">"</span><span class="s2">errorFileType</span><span class="dl">"</span><span class="p">,</span> <span class="dl">""</span><span class="p">);</span>
+
+                <span class="nx">JSONArray</span> <span class="nx">jsonArray</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">JSONArray</span><span class="p">();</span>
+                <span class="nx">jsonArray</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="nx">jsonObject</span><span class="p">);</span>
+                <span class="nx">System</span><span class="p">.</span><span class="nx">out</span><span class="p">.</span><span class="nx">println</span><span class="p">(</span><span class="nx">jsonArray</span><span class="p">.</span><span class="nx">toJSONString</span><span class="p">());</span>
+                <span class="nx">response</span><span class="p">.</span><span class="nx">getOutputStream</span><span class="p">().</span><span class="nx">write</span><span class="p">(</span><span class="nx">jsonArray</span><span class="p">.</span><span class="nx">toString</span><span class="p">().</span><span class="nx">getBytes</span><span class="p">(</span><span class="dl">"</span><span class="s2">utf-8</span><span class="dl">"</span><span class="p">));</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="nx">FileUploadException</span> <span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">e</span><span class="p">.</span><span class="nx">printStackTrace</span><span class="p">();</span>
+    <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="nx">Exception</span> <span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">e</span><span class="p">.</span><span class="nx">printStackTrace</span><span class="p">();</span>
+   <span class="p">}</span>
+<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="jquery提交表单带有普通表单和文件使用序列化">JQuery提交表单,带有普通表单和文件,使用序列化</h3>
+
+<p>JQuery提交数据:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">var</span> <span class="nx">formData</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">FormData</span><span class="p">();</span>
+<span class="nx">formData</span><span class="p">.</span><span class="nx">append</span><span class="p">(</span><span class="dl">'</span><span class="s1">file</span><span class="dl">'</span><span class="p">,</span> <span class="nx">$</span><span class="p">(</span><span class="dl">'</span><span class="s1">#file</span><span class="dl">'</span><span class="p">)[</span><span class="mi">0</span><span class="p">].</span><span class="nx">files</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+<span class="nx">formData</span><span class="p">.</span><span class="nx">append</span><span class="p">(</span><span class="dl">'</span><span class="s1">name</span><span class="dl">'</span><span class="p">,</span> <span class="nx">$</span><span class="p">(</span><span class="dl">'</span><span class="s1">#name</span><span class="dl">'</span><span class="p">).</span><span class="nx">val</span><span class="p">());</span>
+<span class="nx">formData</span><span class="p">.</span><span class="nx">append</span><span class="p">(</span><span class="dl">'</span><span class="s1">artist</span><span class="dl">'</span><span class="p">,</span> <span class="nx">$</span><span class="p">(</span><span class="dl">'</span><span class="s1">#artist</span><span class="dl">'</span><span class="p">).</span><span class="nx">val</span><span class="p">());</span>
+<span class="nx">$</span><span class="p">.</span><span class="nx">ajax</span><span class="p">({</span>
+    <span class="na">url</span><span class="p">:</span> <span class="dl">'</span><span class="s1">${pageContext.request.contextPath}/upload</span><span class="dl">'</span><span class="p">,</span>
+    <span class="na">type</span><span class="p">:</span> <span class="dl">'</span><span class="s1">post</span><span class="dl">'</span><span class="p">,</span>
+    <span class="na">cache</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+    <span class="na">processData</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+    <span class="na">contentType</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+    <span class="na">data</span><span class="p">:</span> <span class="nx">formData</span><span class="p">,</span>
+    <span class="na">success</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">data</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">alert</span><span class="p">(</span><span class="dl">"</span><span class="s2">成功</span><span class="dl">"</span><span class="p">)</span>
+    <span class="p">},</span>
+    <span class="na">error</span><span class="p">:</span> <span class="kd">function</span><span class="p">(){</span>
+        <span class="nx">alert</span><span class="p">(</span><span class="dl">'</span><span class="s1">未知错误</span><span class="dl">'</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div></div>
+:ET

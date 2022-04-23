@@ -1,0 +1,60 @@
+I"�<blockquote>
+  <p>本文为原创，本人也是个linux初学者，如果有错误，请欢迎指正</p>
+</blockquote>
+
+<h3 id="第一步">第一步</h3>
+
+<p>检查无线网卡型号，使用</p>
+
+<p><code class="language-plaintext highlighter-rouge">lspci</code></p>
+
+<p>我的查询结果为：</p>
+
+<p><code class="language-plaintext highlighter-rouge">03:00.0 Network controller: Realtek Semiconductor Co., Ltd. Device d723</code></p>
+
+<p>当然为了快速寻找可以使用以下命令：</p>
+
+<p><code class="language-plaintext highlighter-rouge">lspci | grep Network -i</code></p>
+
+<h3 id="第二步">第二步</h3>
+
+<p>根据网卡选择相应的驱动安装</p>
+
+<p>下面我将演示d723（ RTL8723DE）的安装：</p>
+
+<p>这个网卡的驱动在这个网站有选择，<a href="https://github.com/smlinux/rtl8723de">点这里</a></p>
+
+<p>然后根据你的linux内核版本下载驱动,在branch下面有多个版本</p>
+
+<p><img src="/assets/images/posts/2019-04-06-linux/01.png" alt="" /></p>
+
+<h3 id="第三步">第三步</h3>
+
+<p>使用git下载然后安装</p>
+
+<p>首先需要安装git</p>
+
+<p><code class="language-plaintext highlighter-rouge">sudo apt install git -y</code></p>
+
+<p>安装好后应该就可以使用下面的命令了，注意命令要一条一条的执行，如果有出现错误，要先解决错误再执行后面的命令</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>git clone https://github.com/smlinux/rtl8723de.git <span class="nt">-b</span> 4.15-up
+dkms add ./rtl8723de
+dkms <span class="nb">install </span>rtl8723de/5.1.1.8_21285.20171026_COEX20170111-1414
+depmod <span class="nt">-a</span>
+reboot
+</code></pre></div></div>
+
+<p>如果没有dkms的话，可以执行</p>
+
+<p><code class="language-plaintext highlighter-rouge">sudo apt install dkms</code></p>
+
+<p>有安装当然就有卸载了</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>rmmod <span class="nt">-f</span> 8723de
+dkms uninstall rtl8723de/5.1.1.8_21285.20171026_COEX20170111-1414
+dkms remove rtl8723de/5.1.1.8_21285.20171026_COEX20170111-1414 <span class="nt">--all</span>
+depmod <span class="nt">-a</span>
+reboot
+</code></pre></div></div>
+:ET

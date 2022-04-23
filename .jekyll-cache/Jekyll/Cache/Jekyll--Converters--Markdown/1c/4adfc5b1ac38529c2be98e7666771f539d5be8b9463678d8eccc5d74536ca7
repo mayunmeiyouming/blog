@@ -1,0 +1,353 @@
+I"�v<h3 id="入门">入门</h3>
+
+<p>web.xml</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">&lt;!DOCTYPE web-app PUBLIC
+ "-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN"
+ "http://java.sun.com/dtd/web-app_2_3.dtd" &gt;</span>
+
+<span class="nt">&lt;web-app&gt;</span>
+  <span class="nt">&lt;display-name&gt;</span>Archetype Created Web Application<span class="nt">&lt;/display-name&gt;</span>
+  
+  <span class="nt">&lt;servlet&gt;</span>
+    <span class="nt">&lt;servlet-name&gt;</span>DispatcherServlet<span class="nt">&lt;/servlet-name&gt;</span>
+    <span class="nt">&lt;servlet-class&gt;</span>org.springframework.web.servlet.DispatcherServlet<span class="nt">&lt;/servlet-class&gt;</span>
+    <span class="nt">&lt;load-on-startup&gt;</span>1<span class="nt">&lt;/load-on-startup&gt;</span>
+  <span class="nt">&lt;/servlet&gt;</span>
+  <span class="nt">&lt;servlet-mapping&gt;</span>
+    <span class="nt">&lt;servlet-name&gt;</span>DispatcherServlet<span class="nt">&lt;/servlet-name&gt;</span>
+    <span class="nt">&lt;url-pattern&gt;</span>*.do<span class="nt">&lt;/url-pattern&gt;</span>
+  <span class="nt">&lt;/servlet-mapping&gt;</span>
+<span class="nt">&lt;/web-app&gt;</span>
+</code></pre></div></div>
+
+<p>DispatcherServlet-servlet.xml</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>
+<span class="nt">&lt;beans</span> <span class="na">xmlns=</span><span class="s">"http://www.springframework.org/schema/beans"</span>
+       <span class="na">xmlns:xsi=</span><span class="s">"http://www.w3.org/2001/XMLSchema-instance"</span> <span class="na">xmlns:mvc=</span><span class="s">"http://www.springframework.org/schema/mvc"</span>
+       <span class="na">xmlns:context=</span><span class="s">"http://www.springframework.org/schema/context"</span>
+       <span class="na">xmlns:aop=</span><span class="s">"http://www.springframework.org/schema/aop"</span> <span class="na">xmlns:tx=</span><span class="s">"http://www.springframework.org/schema/tx"</span>
+       <span class="na">xsi:schemaLocation=</span><span class="s">"http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans-3.2.xsd
+        http://www.springframework.org/schema/mvc
+        http://www.springframework.org/schema/mvc/spring-mvc-3.2.xsd
+        http://www.springframework.org/schema/context
+        http://www.springframework.org/schema/context/spring-context-3.2.xsd
+        http://www.springframework.org/schema/aop
+        http://www.springframework.org/schema/aop/spring-aop-3.2.xsd
+        http://www.springframework.org/schema/tx
+        http://www.springframework.org/schema/tx/spring-tx-3.2.xsd"</span><span class="nt">&gt;</span>
+
+
+    <span class="c">&lt;!-- 配置url映射 --&gt;</span>
+    <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.handler.BeanNameUrlHandlerMapping"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+    <span class="c">&lt;!-- 配置控制器处理适配器 --&gt;</span>
+    <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.mvc.SimpleControllerHandlerAdapter"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+    <span class="c">&lt;!-- 配置控制器,相当于配置了访问路径 --&gt;</span>
+    <span class="nt">&lt;bean</span> <span class="na">name=</span><span class="s">"/user.do"</span> <span class="na">class=</span><span class="s">"Controller.UserController"</span> <span class="nt">&gt;&lt;/bean&gt;</span>
+
+    <span class="c">&lt;!-- 资源解析器 --&gt;</span>
+    <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.view.InternalResourceViewResolver"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"prefix"</span> <span class="na">value=</span><span class="s">"/WEB-INF/views/"</span><span class="nt">&gt;&lt;/property&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"suffix"</span> <span class="na">value=</span><span class="s">".jsp"</span><span class="nt">&gt;&lt;/property&gt;</span>
+    <span class="nt">&lt;/bean&gt;</span>
+
+<span class="nt">&lt;/beans&gt;</span>
+</code></pre></div></div>
+
+<p>UserController</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">package</span> <span class="nn">Controller</span><span class="o">;</span>
+
+<span class="kn">import</span> <span class="nn">org.springframework.web.servlet.ModelAndView</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.springframework.web.servlet.mvc.Controller</span><span class="o">;</span>
+
+<span class="kn">import</span> <span class="nn">javax.servlet.http.HttpServletRequest</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">javax.servlet.http.HttpServletResponse</span><span class="o">;</span>
+
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">UserController</span> <span class="kd">implements</span> <span class="nc">Controller</span> <span class="o">{</span>
+    <span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="nc">ModelAndView</span> <span class="nf">handleRequest</span><span class="o">(</span><span class="nc">HttpServletRequest</span> <span class="n">httpServletRequest</span><span class="o">,</span>
+                                      <span class="nc">HttpServletResponse</span> <span class="n">httpServletResponse</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">Exception</span> <span class="o">{</span>
+        <span class="nc">ModelAndView</span> <span class="n">modelAndView</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ModelAndView</span><span class="o">(</span><span class="s">"userlist"</span><span class="o">);</span>
+        <span class="n">modelAndView</span><span class="o">.</span><span class="na">addObject</span><span class="o">(</span><span class="s">"name"</span><span class="o">,</span> <span class="s">"黄伟"</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">modelAndView</span><span class="o">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="url映射">url映射</h3>
+
+<h4 id="beannameurlhandlermapping">BeanNameUrlHandlerMapping</h4>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.handler.BeanNameUrlHandlerMapping"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+<span class="nt">&lt;bean</span> <span class="na">name=</span><span class="s">"/user.do"</span> <span class="na">class=</span><span class="s">"Controller.UserController"</span> <span class="nt">&gt;&lt;/bean&gt;</span>
+</code></pre></div></div>
+
+<h4 id="simpleurlhandlermapping">SimpleUrlHandlerMapping</h4>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.handler.SimpleUrlHandlerMapping"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"mappings"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;props&gt;</span>
+            <span class="nt">&lt;prop</span> <span class="na">key=</span><span class="s">"/user1.do"</span><span class="nt">&gt;</span>userController<span class="nt">&lt;/prop&gt;</span>
+            <span class="nt">&lt;/props&gt;</span>
+    <span class="nt">&lt;/property&gt;</span>
+<span class="nt">&lt;/bean&gt;</span>
+
+<span class="nt">&lt;bean</span> <span class="na">id=</span><span class="s">"userController"</span> <span class="na">class=</span><span class="s">"Controller.UserController"</span> <span class="nt">&gt;&lt;/bean&gt;</span>
+</code></pre></div></div>
+
+<h3 id="handleradapter">HandlerAdapter</h3>
+
+<h4 id="simplecontrollerhandleradapter">SimpleControllerHandlerAdapter</h4>
+
+<p>控制器调用handleRequest方法,返回ModelAndView</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.mvc.SimpleControllerHandlerAdapter"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+</code></pre></div></div>
+
+<p>控制器实现:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">package</span> <span class="nn">Controller</span><span class="o">;</span>
+
+<span class="kn">import</span> <span class="nn">org.springframework.web.servlet.ModelAndView</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.springframework.web.servlet.mvc.Controller</span><span class="o">;</span>
+
+<span class="kn">import</span> <span class="nn">javax.servlet.http.HttpServletRequest</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">javax.servlet.http.HttpServletResponse</span><span class="o">;</span>
+
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">UserController</span> <span class="kd">implements</span> <span class="nc">Controller</span> <span class="o">{</span>
+    <span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="nc">ModelAndView</span> <span class="nf">handleRequest</span><span class="o">(</span><span class="nc">HttpServletRequest</span> <span class="n">httpServletRequest</span><span class="o">,</span>
+                                      <span class="nc">HttpServletResponse</span> <span class="n">httpServletResponse</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">Exception</span> <span class="o">{</span>
+        <span class="nc">ModelAndView</span> <span class="n">modelAndView</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ModelAndView</span><span class="o">(</span><span class="s">"userlist"</span><span class="o">);</span>
+        <span class="n">modelAndView</span><span class="o">.</span><span class="na">addObject</span><span class="o">(</span><span class="s">"name"</span><span class="o">,</span> <span class="s">"黄伟"</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">modelAndView</span><span class="o">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h4 id="httprequesthandleradapter">HttpRequestHandlerAdapter</h4>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.mvc.HttpRequestHandlerAdapter"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+</code></pre></div></div>
+
+<p>类:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">class</span> <span class="nc">HttpController</span> <span class="kd">implements</span> <span class="nc">HttpRequestHandler</span> <span class="o">{</span>
+    <span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">handleRequest</span><span class="o">(</span><span class="nc">HttpServletRequest</span> <span class="n">request</span><span class="o">,</span> <span class="nc">HttpServletResponse</span> <span class="n">response</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">ServletException</span><span class="o">,</span> <span class="nc">IOException</span> <span class="o">{</span>
+        <span class="n">request</span><span class="o">.</span><span class="na">setAttribute</span><span class="o">(</span><span class="s">"name"</span><span class="o">,</span> <span class="s">"黄伟"</span><span class="o">);</span>
+        <span class="n">request</span><span class="o">.</span><span class="na">getRequestDispatcher</span><span class="o">(</span><span class="s">"/WEB-INF/views/userlist.jsp"</span><span class="o">).</span><span class="na">forward</span><span class="o">(</span><span class="n">request</span><span class="o">,</span><span class="n">response</span><span class="o">);</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="注解">注解</h3>
+
+<p>xml配置:</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">&lt;!-- 配置控制器 --&gt;</span>
+<span class="c">&lt;!-- 扫描包 --&gt;</span>
+<span class="nt">&lt;context:component-scan</span> <span class="na">base-package=</span><span class="s">"Controller"</span><span class="nt">&gt;&lt;/context:component-scan&gt;</span>
+
+<span class="c">&lt;!-- 处理映射 --&gt;</span>
+<span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+<span class="c">&lt;!-- 配置适配器 --&gt;</span>
+<span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+<span class="c">&lt;!-- 资源解析器 --&gt;</span>
+<span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.view.InternalResourceViewResolver"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"prefix"</span> <span class="na">value=</span><span class="s">"/WEB-INF/views/"</span><span class="nt">&gt;&lt;/property&gt;</span>
+    <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"suffix"</span> <span class="na">value=</span><span class="s">".jsp"</span><span class="nt">&gt;&lt;/property&gt;</span>
+<span class="nt">&lt;/bean&gt;</span>
+</code></pre></div></div>
+
+<p>Controller</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@org</span><span class="o">.</span><span class="na">springframework</span><span class="o">.</span><span class="na">stereotype</span><span class="o">.</span><span class="na">Controller</span>
+<span class="nd">@RequestMapping</span><span class="o">(</span><span class="s">"/user"</span><span class="o">)</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">UserController</span> <span class="o">{</span>
+
+    <span class="nd">@RequestMapping</span><span class="o">(</span><span class="s">"/list"</span><span class="o">)</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">list</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="s">"userlist"</span><span class="o">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="spring接收表单数据">spring接收表单数据</h3>
+
+<p>1.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@RequestMapping</span><span class="o">(</span><span class="s">"/register"</span><span class="o">)</span>
+<span class="kd">public</span> <span class="nc">String</span> <span class="nf">register</span><span class="o">(</span><span class="nc">String</span> <span class="n">username</span><span class="o">,</span> <span class="nc">String</span> <span class="n">password</span><span class="o">)</span> <span class="o">{</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">username</span><span class="o">);</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">password</span><span class="o">);</span>
+    <span class="k">return</span> <span class="s">"userlist"</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<ol>
+  <li>模型</li>
+</ol>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@RequestMapping</span><span class="o">(</span><span class="s">"/register2"</span><span class="o">)</span>
+<span class="kd">public</span> <span class="nc">String</span> <span class="nf">register</span><span class="o">(</span><span class="nc">User</span> <span class="n">user</span><span class="o">)</span> <span class="o">{</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getUsername</span><span class="o">());</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getPassword</span><span class="o">());</span>
+    <span class="k">return</span> <span class="s">"userlist"</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>3.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">class</span> <span class="nc">UserExt</span> <span class="o">{</span>
+
+    <span class="kd">private</span> <span class="nc">User</span> <span class="n">user</span><span class="o">;</span>
+
+    <span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">toString</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="s">"UserExt{"</span> <span class="o">+</span>
+                <span class="s">"user="</span> <span class="o">+</span> <span class="n">user</span> <span class="o">+</span>
+                <span class="sc">'}'</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="nc">User</span> <span class="nf">getUser</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="n">user</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">setUser</span><span class="o">(</span><span class="nc">User</span> <span class="n">user</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">this</span><span class="o">.</span><span class="na">user</span> <span class="o">=</span> <span class="n">user</span><span class="o">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;form</span> <span class="na">action=</span><span class="s">"/springmvc/user/register2.do"</span><span class="nt">&gt;</span>
+    用户名: <span class="nt">&lt;input</span> <span class="na">type=</span><span class="s">"text"</span> <span class="na">name=</span><span class="s">"user.username"</span><span class="nt">&gt;&lt;br&gt;</span>
+    密码: <span class="nt">&lt;input</span> <span class="na">type=</span><span class="s">"password"</span> <span class="na">name=</span><span class="s">"user.password"</span><span class="nt">&gt;&lt;br&gt;</span>
+    <span class="nt">&lt;button</span> <span class="na">type=</span><span class="s">"submit"</span> <span class="na">name=</span><span class="s">"提交"</span><span class="nt">&gt;&lt;/button&gt;&lt;br&gt;</span>
+<span class="nt">&lt;/form&gt;</span>
+</code></pre></div></div>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@RequestMapping</span><span class="o">(</span><span class="s">"/register2"</span><span class="o">)</span>
+<span class="kd">public</span> <span class="nc">String</span> <span class="nf">register</span><span class="o">(</span><span class="nc">UserExt</span> <span class="n">userExt</span><span class="o">)</span> <span class="o">{</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">userExt</span><span class="o">);</span>
+    <span class="k">return</span> <span class="s">"userlist"</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="数据回显">数据回显</h3>
+
+<p>使用Model</p>
+
+<h3 id="url">url</h3>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@RequestMapping</span><span class="o">(</span><span class="s">"/list/{id}"</span><span class="o">)</span>
+<span class="kd">public</span> <span class="nc">String</span> <span class="nf">list</span><span class="o">(</span><span class="nd">@PathVariable</span> <span class="kt">int</span> <span class="n">id</span><span class="o">,</span> <span class="nc">Model</span> <span class="n">model</span><span class="o">)</span> <span class="o">{</span>
+    <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"username"</span><span class="o">,</span> <span class="s">"黄伟"</span><span class="o">);</span>
+    <span class="k">return</span> <span class="s">"userlist"</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="转发和重定向">转发和重定向</h3>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">return</span> <span class="s">"forward:userlist.do"</span><span class="o">;</span>
+</code></pre></div></div>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">return</span> <span class="s">"redirect:userlist.do"</span><span class="o">;</span>
+</code></pre></div></div>
+
+<h3 id="json数据">json数据</h3>
+
+<p>spring5.0.8</p>
+
+<p>jackson包</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;dependency&gt;</span>
+    <span class="nt">&lt;groupId&gt;</span>com.fasterxml.jackson.core<span class="nt">&lt;/groupId&gt;</span>
+    <span class="nt">&lt;artifactId&gt;</span>jackson-annotations<span class="nt">&lt;/artifactId&gt;</span>
+    <span class="nt">&lt;version&gt;</span>2.9.5<span class="nt">&lt;/version&gt;</span>
+<span class="nt">&lt;/dependency&gt;</span>
+<span class="nt">&lt;dependency&gt;</span>
+    <span class="nt">&lt;groupId&gt;</span>com.fasterxml.jackson.core<span class="nt">&lt;/groupId&gt;</span>
+    <span class="nt">&lt;artifactId&gt;</span>jackson-core<span class="nt">&lt;/artifactId&gt;</span>
+    <span class="nt">&lt;version&gt;</span>2.9.5<span class="nt">&lt;/version&gt;</span>
+<span class="nt">&lt;/dependency&gt;</span>
+<span class="nt">&lt;dependency&gt;</span>
+    <span class="nt">&lt;groupId&gt;</span>com.fasterxml.jackson.core<span class="nt">&lt;/groupId&gt;</span>
+    <span class="nt">&lt;artifactId&gt;</span>jackson-databind<span class="nt">&lt;/artifactId&gt;</span>
+      <span class="nt">&lt;version&gt;</span>2.9.5<span class="nt">&lt;/version&gt;</span>
+<span class="nt">&lt;/dependency&gt;</span>
+</code></pre></div></div>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@RequestMapping</span><span class="o">(</span><span class="s">"/save"</span><span class="o">)</span>
+<span class="nd">@ResponseBody</span>
+<span class="kd">public</span> <span class="nc">User</span> <span class="nf">save</span><span class="o">(</span><span class="nd">@RequestBody</span> <span class="nc">User</span> <span class="n">user</span><span class="o">)</span> <span class="o">{</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">user</span><span class="o">);</span>
+    <span class="n">user</span><span class="o">.</span><span class="na">setPassword</span><span class="o">(</span><span class="s">"黄伟"</span><span class="o">);</span>
+    <span class="k">return</span> <span class="n">user</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;mvc:annotation-driven</span> <span class="nt">/&gt;</span>
+<span class="c">&lt;!-- 配置适配器 --&gt;</span>
+<span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"messageConverters"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;list&gt;</span>
+            <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.http.converter.json.MappingJackson2HttpMessageConverter"</span><span class="nt">/&gt;</span>
+            <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.http.converter.ByteArrayHttpMessageConverter"</span><span class="nt">/&gt;</span>
+            <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.http.converter.xml.SourceHttpMessageConverter"</span><span class="nt">/&gt;</span>
+            <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.http.converter.FormHttpMessageConverter"</span><span class="nt">/&gt;</span>
+            <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.http.converter.StringHttpMessageConverter"</span><span class="nt">/&gt;</span>
+        <span class="nt">&lt;/list&gt;</span>
+    <span class="nt">&lt;/property&gt;</span>
+<span class="nt">&lt;/bean&gt;</span>
+</code></pre></div></div>
+
+<h3 id="spring多视图">spring多视图</h3>
+
+<p>url后面加.json或.xml</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">&lt;!-- 多视图 --&gt;</span>
+    <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.view.ContentNegotiatingViewResolver"</span><span class="nt">&gt;</span>
+        <span class="c">&lt;!-- 配置支持类型 --&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"contentNegotiationManager"</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.accept.ContentNegotiationManagerFactoryBean"</span><span class="nt">&gt;</span>
+                <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"mediaTypes"</span><span class="nt">&gt;</span>
+                    <span class="nt">&lt;map&gt;</span>
+                        <span class="nt">&lt;entry</span> <span class="na">key=</span><span class="s">"json"</span> <span class="na">value=</span><span class="s">"application/json"</span><span class="nt">&gt;&lt;/entry&gt;</span>
+                        <span class="nt">&lt;entry</span> <span class="na">key=</span><span class="s">"xml"</span> <span class="na">value=</span><span class="s">"application/xml"</span><span class="nt">&gt;&lt;/entry&gt;</span>
+                    <span class="nt">&lt;/map&gt;</span>
+                <span class="nt">&lt;/property&gt;</span>
+            <span class="nt">&lt;/bean&gt;</span>
+        <span class="nt">&lt;/property&gt;</span>
+
+        <span class="c">&lt;!-- 配置默认视图 --&gt;</span>
+        <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"defaultViews"</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;list&gt;</span>
+                <span class="c">&lt;!-- json --&gt;</span>
+                <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.view.json.MappingJackson2JsonView"</span><span class="nt">&gt;&lt;/bean&gt;</span>
+
+                <span class="c">&lt;!-- xml --&gt;</span>
+                <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.web.servlet.view.xml.MarshallingView"</span><span class="nt">&gt;</span>
+                    <span class="nt">&lt;constructor-arg&gt;</span>
+                        <span class="nt">&lt;bean</span> <span class="na">class=</span><span class="s">"org.springframework.oxm.jaxb.Jaxb2Marshaller"</span><span class="nt">&gt;</span>
+                            <span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"classesToBeBound"</span><span class="nt">&gt;</span>
+                                <span class="nt">&lt;list&gt;</span>
+                                    <span class="nt">&lt;value&gt;</span>model.User<span class="nt">&lt;/value&gt;</span>
+                                <span class="nt">&lt;/list&gt;</span>
+                            <span class="nt">&lt;/property&gt;</span>
+                        <span class="nt">&lt;/bean&gt;</span>
+                    <span class="nt">&lt;/constructor-arg&gt;</span>
+                <span class="nt">&lt;/bean&gt;</span>
+            <span class="nt">&lt;/list&gt;</span>
+        <span class="nt">&lt;/property&gt;</span>
+    <span class="nt">&lt;/bean&gt;</span>
+</code></pre></div></div>
+:ET

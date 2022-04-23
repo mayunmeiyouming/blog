@@ -1,0 +1,732 @@
+I"�w<blockquote>
+  <p>本文为原创</p>
+</blockquote>
+
+<h2 id="part-b-copy-on-write-fork">Part B: Copy-on-Write Fork</h2>
+
+<p>如前所述，Unix提供<code class="language-plaintext highlighter-rouge">fork()</code>系统调用作为其主要的进程创建原语。 <code class="language-plaintext highlighter-rouge">fork()</code>系统调用复制调用进程（父进程）的地址空间以创建一个新进程（子进程）。</p>
+
+<p>xv6 Unix通过将父页面的所有数据复制到为孩子分配的新页面中来实现<code class="language-plaintext highlighter-rouge">fork()</code>。这本质上与<code class="language-plaintext highlighter-rouge">dumbfork()</code>所采用的方法相同。将父进程地址空间复制到子进程是<code class="language-plaintext highlighter-rouge">fork()</code>操作中最昂贵的部分。</p>
+
+<p>但是，在<code class="language-plaintext highlighter-rouge">fork()</code>的调用产生的子进程中，通常会紧跟着<code class="language-plaintext highlighter-rouge">exec()</code>，这会用新程序替换了子进程的内存。在这种情况下，复制父进程地址空间所花费的时间大大浪费了，因为子进程在调用<code class="language-plaintext highlighter-rouge">exec()</code>之前只使用了很少的内存。</p>
+
+<p>因此，更高版本的Unix会利用虚拟内存硬件实现父进程和子进程共享映射到其各自地址空间的内存，直到其中一个进程实际对其进行修改为止。这种技术称为写时复制。为此，内核将在<code class="language-plaintext highlighter-rouge">fork()</code>上将地址空间映射从父进程复制到子进程，而不是映射页面的内容，同时将当前共享的页面标记为只读。当两个进程之一尝试写入这些共享页面时，该进程将出现<code class="language-plaintext highlighter-rouge">page fault</code>。此时，Unix内核知道该页面实际上是<code class="language-plaintext highlighter-rouge">虚拟</code>副本或<code class="language-plaintext highlighter-rouge">写时复制</code>副本，因此它会出现该错误的进程创建一个这个页面的新的，私有的，可写的副本。这样，直到它们被实际写入为止，各个页面的内容实际上都不会被复制。这种优化使在子进程中的<code class="language-plaintext highlighter-rouge">fork()</code>之后调用<code class="language-plaintext highlighter-rouge">exec()</code>要轻便得多：子进程在调用<code class="language-plaintext highlighter-rouge">exec()</code>之前可能只需要复制一页（其堆栈的当前页）。</p>
+
+<p>在本实验的下一部分中，你将实现一个<code class="language-plaintext highlighter-rouge">适当的</code>类Unix的<code class="language-plaintext highlighter-rouge">fork()</code>，该类具有写时复制功能，并且作为用户空间库例程。在用户空间中实现<code class="language-plaintext highlighter-rouge">fork()</code>和写时复制的好处是内核保持简单。它还允许单个用户模式程序为<code class="language-plaintext highlighter-rouge">fork()</code>定义自己的语义。可以轻松为自己的程序提供一个稍有不同的fork实现（例如，全复制版本<code class="language-plaintext highlighter-rouge">dumbfork()</code>，或者父进程和子进程之后共享内存的版本）。</p>
+
+<h3 id="用户级page-fault处理">用户级page fault处理</h3>
+
+<p>用户级别的写时复制<code class="language-plaintext highlighter-rouge">fork()</code>需要了解写保护页上的页面错误，因此这是你首先要实现的。写时复制只是用户级页面错误处理的多种可能用途之一。</p>
+
+<p>设置地址空间是很常见的，以便页面错误指示何时需要执行某些操作。例如，大多数Unix内核最初只在新进程的堆栈区域中映射单个页面，并在以后<code class="language-plaintext highlighter-rouge">按需</code>分配和映射其他堆栈页面，因为该进程的堆栈消耗增加，并导致尚未映射的堆栈地址出现页面错误。在进程空间的每个区域中发生页面错误时，典型的Unix内核必须跟踪采取的措施。例如，堆栈区域中的故障通常会分配并映射新的物理内存页面。程序的BSS区域中的故障通常会分配一个新页面，并用零填充并映射它。在具有按需分页的可执行文件的系统中，文本区域中的错误将从磁盘读取二进制文件的相应页面，然后将其映射。</p>
+
+<p>这是内核要跟踪的很多信息。你无需采取传统的Unix方法，而是可以决定如何处理用户空间中每个页面错误，而这些错误对破坏性的影响较小。这种设计的附加好处是允许程序在定义其内存区域时具有极大的灵活性。你稍后将使用用户级页面错误处理来映射和访问基于磁盘的文件系统上的文件。</p>
+
+<h4 id="设置页面错误处理程序">设置页面错误处理程序</h4>
+
+<p>为了处理自己的页面错误，用户环境将需要在JOS内核中注册页面错误处理程序入口点。用户环境通过新的系统调用<code class="language-plaintext highlighter-rouge">sys_env_set_pgfault_upcall</code>注册其页面错误程序入口点。我们在Env结构中添加了一个新成员<code class="language-plaintext highlighter-rouge">env_pgfault_upcall</code>，以记录此信息。</p>
+
+<h5 id="exercise-8">Exercise 8</h5>
+
+<p>实现系统调用<code class="language-plaintext highlighter-rouge">sys_env_set_pgfault_upcall</code>。查找目标环境的环境ID时，请确保启用权限检查，因为这是<code class="language-plaintext highlighter-rouge">危险的</code>系统调用。</p>
+
+<p>sys_env_set_pgfault_upcall的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span> <span class="nf">sys_env_set_pgfault_upcall</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">envid</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">func</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="c1">// panic("sys_env_set_pgfault_upcall not implemented");</span>
+    <span class="k">struct</span> <span class="n">Env</span><span class="o">*</span> <span class="n">e</span><span class="p">;</span>
+    <span class="k">if</span><span class="p">(</span><span class="n">envid2env</span><span class="p">(</span><span class="n">envid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">e</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">E_BAD_ENV</span><span class="p">;</span>
+    <span class="n">e</span><span class="o">-&gt;</span><span class="n">env_pgfault_upcall</span> <span class="o">=</span> <span class="n">func</span><span class="p">;</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">kern/syscall.c syscall</code>增加代码：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">case</span> <span class="n">SYS_env_set_pgfault_upcall</span><span class="p">:</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">sys_env_set_pgfault_upcall</span><span class="p">(</span><span class="n">a1</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">a2</span><span class="p">);</span>
+    <span class="k">break</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h4 id="用户环境中的正常堆栈和异常堆栈">用户环境中的正常堆栈和异常堆栈</h4>
+
+<p>在正常执行期间，JOS中的用户环境将在普通用户堆栈上运行：其<code class="language-plaintext highlighter-rouge">ESP</code>寄存器开始指向<code class="language-plaintext highlighter-rouge">USTACKTOP</code>，而其推送的堆栈数据位于<code class="language-plaintext highlighter-rouge">USTACKTOP-PGSIZE</code>和<code class="language-plaintext highlighter-rouge">USTACKTOP-1</code>（含）之间。但是，当在用户模式下发生页面错误时，内核将在另一个堆栈（即用户异常堆栈）上运行指定的用户级页面错误处理程序。本质上，我们将使JOS内核代表用户环境实现自动<code class="language-plaintext highlighter-rouge">堆栈切换</code>，这与x86处理器已经在从用户模式转换到内核模式时已经代表JOS实现堆栈切换的方式几乎相同！</p>
+
+<p>JOS用户异常堆栈的大小也为一页，并且其顶部定义为虚拟地址<code class="language-plaintext highlighter-rouge">UXSTACKTOP</code>，因此用户异常堆栈的有效字节从<code class="language-plaintext highlighter-rouge">UXSTACKTOP-PGSIZE</code>到<code class="language-plaintext highlighter-rouge">UXSTACKTOP-1</code>（包括<code class="language-plaintext highlighter-rouge">UXSTACKTOP-1</code>）。在此异常堆栈上运行时，用户级页面错误处理程序可以使用JOS的常规系统调用来映射新页面或调整映射，以修复最初导致页面错误的任何问题。然后，用户级页面错误处理程序通过汇编语言<code class="language-plaintext highlighter-rouge">stub</code>返回给原始堆栈一个错误代码。</p>
+
+<p>希望支持用户级页面错误处理的每个用户环境都将需要使用A部分中引入的系统调用<code class="language-plaintext highlighter-rouge">sys_page_alloc()</code>为其自身的异常堆栈分配内存。</p>
+
+<h4 id="调用用户页面故障处理程序">调用用户页面故障处理程序</h4>
+
+<p>现在，你将需要更改<code class="language-plaintext highlighter-rouge">kern/trap.c</code>中的页面错误处理代码，以从用户模式处理页面错误，如下所示。我们将发生故障时的用户环境状态称为<code class="language-plaintext highlighter-rouge">trap-time</code>状态。</p>
+
+<p>如果没有注册页面错误处理程序，则JOS内核会像以前一样通过一条消息销毁用户环境。否则，内核将在异常堆栈上设置一个陷阱帧，该陷阱帧看起来像来自<code class="language-plaintext highlighter-rouge">inc/trap.h</code>的<code class="language-plaintext highlighter-rouge">struct UTrapframe</code>：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>                    <span class="o">&lt;--</span> <span class="n">UXSTACKTOP</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">esp</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">eflags</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">eip</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">eax</span>       <span class="n">start</span> <span class="n">of</span> <span class="k">struct</span> <span class="n">PushRegs</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">ecx</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">edx</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">ebx</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">esp</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">ebp</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">esi</span>
+<span class="n">trap</span><span class="o">-</span><span class="n">time</span> <span class="n">edi</span>       <span class="n">end</span> <span class="n">of</span> <span class="k">struct</span> <span class="n">PushRegs</span>
+<span class="n">tf_err</span> <span class="p">(</span><span class="n">error</span> <span class="n">code</span><span class="p">)</span>
+<span class="n">fault_va</span>            <span class="o">&lt;--</span> <span class="o">%</span><span class="n">esp</span> <span class="n">when</span> <span class="n">handler</span> <span class="n">is</span> <span class="n">run</span>
+</code></pre></div></div>
+
+<p>然后内核安排用户环境在具有此堆栈帧的异常堆栈上运行页面错误处理程序，并恢复执行。您必须弄清楚如何做到这一点。 <code class="language-plaintext highlighter-rouge">fault_va</code>是导致页面错误的虚拟地址。</p>
+
+<p>如果在发生异常时用户环境已经在用户异常堆栈上运行，则页面错误处理程序本身已发生故障。在这种情况下，您应该在当前<code class="language-plaintext highlighter-rouge">tf-&gt; tf_esp</code>下而不是在<code class="language-plaintext highlighter-rouge">UXSTACKTOP</code>下开始新的堆栈帧。您应该首先推送一个空的32位字，然后再推送一个<code class="language-plaintext highlighter-rouge">struct UTrapframe</code>。</p>
+
+<p>要测试<code class="language-plaintext highlighter-rouge">tf-&gt;tf_esp</code>是否指向用户异常堆栈上，请检查它是否在<code class="language-plaintext highlighter-rouge">UXSTACKTOP-PGSIZE</code>和<code class="language-plaintext highlighter-rouge">UXSTACKTOP-1</code>之间（包括两端）。</p>
+
+<h5 id="exercise-9">Exercise 9</h5>
+
+<p>在<code class="language-plaintext highlighter-rouge">kern/trap.c</code>中的<code class="language-plaintext highlighter-rouge">page_fault_handler</code>的实现要求将页面错误分派到用户模式处理程序。写入异常堆栈时，请确保采取适当的预防措施。（如果用户环境在异常堆栈上的空间不足，会发生什么？）</p>
+
+<p>page_fault_handler的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span>
+<span class="nf">page_fault_handler</span><span class="p">(</span><span class="k">struct</span> <span class="n">Trapframe</span> <span class="o">*</span><span class="n">tf</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">fault_va</span><span class="p">;</span>
+
+    <span class="c1">// Read processor's CR2 register to find the faulting address</span>
+    <span class="n">fault_va</span> <span class="o">=</span> <span class="n">rcr2</span><span class="p">();</span>
+
+    <span class="c1">// Handle kernel-mode page faults.</span>
+
+    <span class="c1">// LAB 3: Your code here.</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_cs</span> <span class="o">&amp;</span> <span class="mi">3</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"Page Fault in Kernel-Mode at %08x.</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">fault_va</span><span class="p">);</span>
+
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">curenv</span><span class="o">-&gt;</span><span class="n">env_pgfault_upcall</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="kt">uintptr_t</span> <span class="n">va</span><span class="p">;</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_esp</span> <span class="o">&gt;</span> <span class="n">UXSTACKTOP</span> <span class="o">-</span> <span class="n">PGSIZE</span> <span class="o">&amp;&amp;</span> <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_esp</span> <span class="o">&lt;</span> <span class="n">UXSTACKTOP</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">va</span> <span class="o">=</span> <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_esp</span> <span class="o">-</span> <span class="mi">4</span> <span class="o">-</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">UTrapframe</span><span class="p">);</span>   <span class="c1">//每个栈帧之间留空</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">va</span> <span class="o">=</span> <span class="n">UXSTACKTOP</span> <span class="o">-</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">UTrapframe</span><span class="p">);</span>
+        <span class="p">}</span>
+
+        <span class="n">user_mem_assert</span><span class="p">(</span><span class="n">curenv</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span> <span class="n">va</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">UTrapframe</span><span class="p">),</span> <span class="n">PTE_W</span> <span class="o">|</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">);</span>
+
+        <span class="k">struct</span> <span class="n">UTrapframe</span> <span class="o">*</span><span class="n">utf</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">UTrapframe</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">va</span><span class="p">);</span>
+        <span class="n">utf</span><span class="o">-&gt;</span><span class="n">utf_fault_va</span> <span class="o">=</span> <span class="n">fault_va</span><span class="p">;</span>
+        <span class="n">utf</span><span class="o">-&gt;</span><span class="n">utf_err</span> <span class="o">=</span> <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_err</span><span class="p">;</span>
+        <span class="n">utf</span><span class="o">-&gt;</span><span class="n">utf_regs</span> <span class="o">=</span> <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_regs</span><span class="p">;</span>
+        <span class="n">utf</span><span class="o">-&gt;</span><span class="n">utf_eip</span> <span class="o">=</span> <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_eip</span><span class="p">;</span>
+        <span class="n">utf</span><span class="o">-&gt;</span><span class="n">utf_eflags</span> <span class="o">=</span> <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_eflags</span><span class="p">;</span>
+        <span class="n">utf</span><span class="o">-&gt;</span><span class="n">utf_esp</span> <span class="o">=</span> <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_esp</span><span class="p">;</span>
+
+        <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_esp</span> <span class="o">=</span> <span class="n">va</span><span class="p">;</span>
+        <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_eip</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uintptr_t</span><span class="p">)</span> <span class="n">curenv</span><span class="o">-&gt;</span><span class="n">env_pgfault_upcall</span><span class="p">;</span>
+        <span class="n">env_run</span><span class="p">(</span><span class="n">curenv</span><span class="p">);</span>
+    <span class="p">}</span>
+
+
+    <span class="c1">// Destroy the environment that caused the fault.</span>
+    <span class="n">cprintf</span><span class="p">(</span><span class="s">"[%08x] user fault va %08x ip %08x</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+        <span class="n">curenv</span><span class="o">-&gt;</span><span class="n">env_id</span><span class="p">,</span> <span class="n">fault_va</span><span class="p">,</span> <span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_eip</span><span class="p">);</span>
+    <span class="n">print_trapframe</span><span class="p">(</span><span class="n">tf</span><span class="p">);</span>
+    <span class="n">env_destroy</span><span class="p">(</span><span class="n">curenv</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h4 id="用户模式的页面错误处理程序入口点">用户模式的页面错误处理程序入口点</h4>
+
+<p>接下来，你需要实现汇编例程，该例程将负责调用C语言编写的页面错误处理程序并按照原始错误指令恢复执行。该汇编例程是在内核中使用函数<code class="language-plaintext highlighter-rouge">sys_env_set_pgfault_upcall()</code>注册的处理程序。</p>
+
+<p>用户程序调用<code class="language-plaintext highlighter-rouge">sys_env_set_pgfault_upcall()</code>来设置<code class="language-plaintext highlighter-rouge">_pgfault_upcall</code>处理程序和<code class="language-plaintext highlighter-rouge">handler</code>程序。当出现pgfault的时候，会产生中断信号<code class="language-plaintext highlighter-rouge">14</code>，进入的处理程序，然后处理程序运行<code class="language-plaintext highlighter-rouge">_pgfault_upcall</code>程序，<code class="language-plaintext highlighter-rouge">_pgfault_upcall</code>会调用handler程序。</p>
+
+<h5 id="exercise-10">Exercise 10</h5>
+
+<p>在<code class="language-plaintext highlighter-rouge">lib/pfentry.S</code>中实现<code class="language-plaintext highlighter-rouge">_pgfault_upcall</code>例程。有趣的是返回到导致页面错误的用户代码中的原始点。你将直接返回那里，而无需返回内核。困难的部分是同时切换堆栈并重新加载EIP。</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="c1">// 这里将异常栈存储的trap time eip存入发生异常的栈的esp-4处。</span>
+    <span class="c1">// 本来打算使用jmp命令直接跳转到trap time eip处的，结果测试不能通过</span>
+    <span class="c1">// 有点迷</span>
+    <span class="n">movl</span> <span class="mi">48</span><span class="p">(</span><span class="o">%</span><span class="n">esp</span><span class="p">),</span> <span class="o">%</span><span class="n">eax</span>
+    <span class="n">subl</span> <span class="err">$</span><span class="mi">4</span><span class="p">,</span> <span class="o">%</span><span class="n">eax</span>
+    <span class="n">movl</span> <span class="o">%</span><span class="n">eax</span><span class="p">,</span> <span class="mi">48</span><span class="p">(</span><span class="o">%</span><span class="n">esp</span><span class="p">)</span>
+    <span class="n">movl</span> <span class="mi">40</span><span class="p">(</span><span class="o">%</span><span class="n">esp</span><span class="p">),</span> <span class="o">%</span><span class="n">ebx</span>
+    <span class="n">movl</span> <span class="o">%</span><span class="n">ebx</span><span class="p">,</span> <span class="p">(</span><span class="o">%</span><span class="n">eax</span><span class="p">)</span>
+
+    <span class="c1">// Restore the trap-time registers.  After you do this, you</span>
+    <span class="c1">// can no longer modify any general-purpose registers.</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="n">addl</span> <span class="err">$</span><span class="mi">8</span><span class="p">,</span> <span class="o">%</span><span class="n">esp</span>
+    <span class="n">popal</span>
+    <span class="c1">// Restore eflags from the stack.  After you do this, you can</span>
+    <span class="c1">// no longer use arithmetic operations or anything else that</span>
+    <span class="c1">// modifies eflags.</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="n">addl</span> <span class="err">$</span><span class="mi">4</span><span class="p">,</span> <span class="o">%</span><span class="n">esp</span>
+    <span class="n">popfl</span>
+
+    <span class="c1">// Switch back to the adjusted trap-time stack.</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="n">popl</span> <span class="o">%</span><span class="n">esp</span>
+
+    <span class="c1">// Return to re-execute the instruction that faulted.</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="n">ret</span>
+</code></pre></div></div>
+
+<h5 id="exercise-11">Exercise 11</h5>
+
+<p>Finish set_pgfault_handler() in lib/pgfault.c.</p>
+
+<p>set_pgfault_handler的代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span> <span class="nf">set_pgfault_handler</span><span class="p">(</span><span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">handler</span><span class="p">)(</span><span class="k">struct</span> <span class="n">UTrapframe</span> <span class="o">*</span><span class="n">utf</span><span class="p">))</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">r</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">_pgfault_handler</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// First time through!</span>
+        <span class="c1">// LAB 4: Your code here.</span>
+        <span class="k">if</span> <span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_alloc</span><span class="p">(</span><span class="n">thisenv</span><span class="o">-&gt;</span><span class="n">env_id</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">UXSTACKTOP</span> <span class="o">-</span> <span class="n">PGSIZE</span><span class="p">),</span> <span class="n">PTE_W</span> <span class="o">|</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"sys_page_alloc: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+
+        <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_env_set_pgfault_upcall</span><span class="p">(</span><span class="n">thisenv</span><span class="o">-&gt;</span><span class="n">env_id</span><span class="p">,</span> <span class="n">_pgfault_upcall</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"sys_env_set_pgfault_upcall: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Save handler pointer for assembly to call.</span>
+    <span class="n">_pgfault_handler</span> <span class="o">=</span> <span class="n">handler</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="implementing-copy-on-write-fork">Implementing Copy-on-Write Fork</h3>
+
+<p>现在，你有了内核工具，可以完全在用户空间中实现写时复制<code class="language-plaintext highlighter-rouge">fork()</code>。</p>
+
+<p>我们在<code class="language-plaintext highlighter-rouge">lib/fork.c</code>中为你的<code class="language-plaintext highlighter-rouge">fork()</code>提供了一个框架。像<code class="language-plaintext highlighter-rouge">dumbfork()</code>一样，<code class="language-plaintext highlighter-rouge">fork()</code>应该创建一个新环境，然后扫描父环境的整个地址空间，并在子环境中设置相应的页面映射。关键区别在于，尽管<code class="language-plaintext highlighter-rouge">dumbfork()</code>复制了页面，而<code class="language-plaintext highlighter-rouge">fork()</code>最初仅复制页面映射。仅当其中一种环境尝试写入页面时，<code class="language-plaintext highlighter-rouge">fork()</code>才会复制每个页面。</p>
+
+<p><code class="language-plaintext highlighter-rouge">fork()</code>的基本控制流程如下：</p>
+
+<ol>
+  <li>
+    <p>父进程使用上面实现的<code class="language-plaintext highlighter-rouge">set_pgfault_handler()</code>函数将<code class="language-plaintext highlighter-rouge">pgfault()</code>安装为C级页面错误处理程序。</p>
+  </li>
+  <li>
+    <p>父进程调用<code class="language-plaintext highlighter-rouge">sys_exofork()</code>创建一个子进程环境。</p>
+  </li>
+  <li>
+    <p>对于<code class="language-plaintext highlighter-rouge">UTOP</code>下地址空间中的每个可写或写时复制页面，父进程调用<code class="language-plaintext highlighter-rouge">duppage</code>，后者应将写时复制页面映射到子地址空间，然后重新映射到写时复制页面。它自己的地址空间。 [注意：此处的顺序（即在父进程中将页面标记为子进程，然后在父进程中标记）实际上很重要！你知道为什么吗？尝试考虑一种特殊情况，在这种情况下，颠倒顺序可能会引起麻烦。 ] <code class="language-plaintext highlighter-rouge">duppage</code>设置两个<code class="language-plaintext highlighter-rouge">PTE</code>，以使该页面不可写，并在<code class="language-plaintext highlighter-rouge">avail</code>字段中包含<code class="language-plaintext highlighter-rouge">PTE_COW</code>，以区分写时复制页面和真正的只读页面。</p>
+
+    <p>但是，异常堆栈不会以这种方式重新映射。相反，你需要在子进程中为异常堆栈分配一个新页面。由于页面错误处理程序将进行实际的复制，并且页面错误处理程序在异常堆栈上运行，因此无法将异常堆栈写时复制：谁可以复制它？</p>
+
+    <p><code class="language-plaintext highlighter-rouge">fork()</code>还需要处理已经存在的页面，而不是可写或写时复制的页面。</p>
+  </li>
+  <li>
+    <p>父进程为子进程设置用户页面错误入口点，使其看起来像自己一样。</p>
+  </li>
+  <li>
+    <p>子进程现在可以运行了，因此父进程将其标记为可运行。</p>
+  </li>
+</ol>
+
+<p>每次环境向写时复制页面写入数据，都会发生页面错误。这是用户页面错误处理程序的控制流：</p>
+
+<ol>
+  <li>
+    <p>内核将页面错误传到<code class="language-plaintext highlighter-rouge">_pgfault_upcall</code>，后者调用<code class="language-plaintext highlighter-rouge">fork()</code>的<code class="language-plaintext highlighter-rouge">pgfault()</code>处理。</p>
+  </li>
+  <li>
+    <p><code class="language-plaintext highlighter-rouge">pgfault()</code>检查错误是否是写操作（检查错误代码中的<code class="language-plaintext highlighter-rouge">FEC_WR</code>），以及页面的PTE是否标记为<code class="language-plaintext highlighter-rouge">PTE_COW</code>。如果没有,则调用panic()。</p>
+  </li>
+  <li>
+    <p><code class="language-plaintext highlighter-rouge">pgfault()</code>分配一个映射到临时位置的新页面，并将故障页面的内容复制到其中。然后，故障处理程序将新页面映射到具有读/写权限的适当地址，以代替旧的只读映射。</p>
+  </li>
+</ol>
+
+<p>用户级别的<code class="language-plaintext highlighter-rouge">lib/fork.c</code>代码必须查阅环境的页表以进行上述一些操作（例如，将页面的PTE标记为<code class="language-plaintext highlighter-rouge">PTE_COW</code>）。为此，内核正是在<code class="language-plaintext highlighter-rouge">UVPT</code>上映射环境的页表。它使用巧妙的映射技巧使其变得易于查找用户代码的PTE。 <code class="language-plaintext highlighter-rouge">lib/entry.S</code>设置<code class="language-plaintext highlighter-rouge">uvpt</code>和<code class="language-plaintext highlighter-rouge">uvpd</code>，以便你可以轻松地在<code class="language-plaintext highlighter-rouge">lib/fork.c</code>中查找页表信息。</p>
+
+<h4 id="exercise-12">Exercise 12</h4>
+
+<p>在<code class="language-plaintext highlighter-rouge">lib/fork.c</code>中实现<code class="language-plaintext highlighter-rouge">fork</code>，<code class="language-plaintext highlighter-rouge">duppage</code>和<code class="language-plaintext highlighter-rouge">pgfault</code>。</p>
+
+<p>使用<code class="language-plaintext highlighter-rouge">forktree</code>程序测试你的代码。它应该产生以下消息，以及散布的’new env’， ‘free env’和’exiting gracefully’消息。消息可能不会按此顺序出现，并且环境ID可能不同。</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    1000: I am <span class="s1">''</span>
+    1001: I am <span class="s1">'0'</span>
+    2000: I am <span class="s1">'00'</span>
+    2001: I am <span class="s1">'000'</span>
+    1002: I am <span class="s1">'1'</span>
+    3000: I am <span class="s1">'11'</span>
+    3001: I am <span class="s1">'10'</span>
+    4000: I am <span class="s1">'100'</span>
+    1003: I am <span class="s1">'01'</span>
+    5000: I am <span class="s1">'010'</span>
+    4001: I am <span class="s1">'011'</span>
+    2002: I am <span class="s1">'110'</span>
+    1004: I am <span class="s1">'001'</span>
+    1005: I am <span class="s1">'111'</span>
+    1006: I am <span class="s1">'101'</span>
+</code></pre></div></div>
+
+<p>pgfault代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">void</span> <span class="nf">pgfault</span><span class="p">(</span><span class="k">struct</span> <span class="n">UTrapframe</span> <span class="o">*</span><span class="n">utf</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">addr</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span> <span class="n">utf</span><span class="o">-&gt;</span><span class="n">utf_fault_va</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">err</span> <span class="o">=</span> <span class="n">utf</span><span class="o">-&gt;</span><span class="n">utf_err</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">r</span><span class="p">;</span>
+
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="c1">//判断pte是否是可写或写时复制页面，如果不是则中断</span>
+    <span class="n">pte_t</span> <span class="n">pte</span> <span class="o">=</span> <span class="n">uvpt</span><span class="p">[</span><span class="n">PGNUM</span><span class="p">((</span><span class="kt">uintptr_t</span><span class="p">)</span><span class="n">addr</span><span class="p">)];</span>
+    <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">err</span> <span class="o">&amp;</span> <span class="n">FEC_WR</span><span class="p">)</span> <span class="o">||</span> <span class="o">!</span><span class="p">(</span><span class="n">pte</span> <span class="o">&amp;</span> <span class="n">PTE_COW</span><span class="p">))</span>
+    <span class="p">{</span>
+        <span class="n">cprintf</span><span class="p">(</span><span class="s">"[%08x] user fault va %08x ip %08x</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">sys_getenvid</span><span class="p">(),</span> <span class="n">addr</span><span class="p">,</span> <span class="n">utf</span><span class="o">-&gt;</span><span class="n">utf_eip</span><span class="p">);</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"Page Fault!"</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="c1">// 将addr所在的页表映射到新页表，并复制内容</span>
+    <span class="kt">uintptr_t</span> <span class="n">start_addr</span> <span class="o">=</span> <span class="n">ROUNDDOWN</span><span class="p">((</span><span class="kt">uintptr_t</span><span class="p">)</span><span class="n">addr</span><span class="p">,</span> <span class="n">PGSIZE</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_alloc</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">PFTEMP</span><span class="p">,</span> <span class="n">PTE_W</span> <span class="o">|</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"Page Alloc Failed: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="n">memmove</span><span class="p">((</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">PFTEMP</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">start_addr</span><span class="p">,</span> <span class="n">PGSIZE</span><span class="p">);</span>
+    <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_map</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">PFTEMP</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">start_addr</span><span class="p">,</span> <span class="n">PTE_W</span> <span class="o">|</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"Page Map Failed: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_unmap</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">PFTEMP</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">panic</span><span class="p">(</span><span class="s">"pgfault: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="p">}</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>注意取消注释</p>
+
+<p>duppage代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span> <span class="nf">duppage</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">envid</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="n">pn</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">r</span><span class="p">;</span>
+
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="c1">// panic("duppage not implemented");</span>
+    <span class="kt">void</span><span class="o">*</span> <span class="n">va</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">pn</span> <span class="o">*</span> <span class="n">PGSIZE</span><span class="p">);</span>
+    <span class="n">pte_t</span> <span class="n">pte</span> <span class="o">=</span> <span class="n">uvpt</span><span class="p">[</span><span class="n">PGNUM</span><span class="p">(</span><span class="n">va</span><span class="p">)];</span>
+
+    <span class="k">if</span><span class="p">((</span><span class="n">pte</span> <span class="o">&amp;</span> <span class="n">PTE_W</span><span class="p">)</span> <span class="o">||</span> <span class="p">(</span><span class="n">pte</span> <span class="o">&amp;</span> <span class="n">PTE_COW</span><span class="p">))</span>
+    <span class="p">{</span>
+        <span class="c1">// 因为envid2env根据envid返回环境，而envid是0时，则返回当前环境，所以使用0代表当前环境</span>
+        <span class="c1">// 将当前环境的va地址所在的页复制到envid环境的地址空间va所在的页</span>
+        <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_map</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">envid</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_COW</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"Page Map Failed: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+        <span class="c1">// 把当前环境的页表权限改变为写时复制</span>
+        <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_map</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_COW</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"Page Map Failed: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span> <span class="c1">// 当va所在的页的没有写权限时，只需要简单复制</span>
+        <span class="k">if</span><span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_map</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">envid</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"Page Map Failed: %e"</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>fork代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">envid_t</span>
+<span class="nf">fork</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="c1">// panic("fork not implemented");</span>
+    <span class="c1">// Set up our page fault handler appropriately.</span>
+    <span class="n">set_pgfault_handler</span><span class="p">(</span><span class="n">pgfault</span><span class="p">);</span>
+    <span class="c1">// Create a child.</span>
+    <span class="n">envid_t</span> <span class="n">envid</span> <span class="o">=</span> <span class="n">sys_exofork</span><span class="p">();</span>
+    <span class="c1">// Copy our address space and page fault handler setup to the child.</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">envid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// child</span>
+        <span class="n">thisenv</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">envs</span><span class="p">[</span><span class="n">ENVX</span><span class="p">(</span><span class="n">sys_getenvid</span><span class="p">())];</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="c1">// parent</span>
+        <span class="kt">int</span> <span class="n">r</span><span class="p">;</span>
+        <span class="k">for</span> <span class="p">(</span><span class="kt">uintptr_t</span> <span class="n">va</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">va</span> <span class="o">&lt;</span> <span class="n">USTACKTOP</span><span class="p">;</span> <span class="n">va</span> <span class="o">+=</span> <span class="n">PGSIZE</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">((</span><span class="n">uvpd</span><span class="p">[</span><span class="n">PDX</span><span class="p">(</span><span class="n">va</span><span class="p">)]</span> <span class="o">&amp;</span> <span class="n">PTE_P</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">uvpt</span><span class="p">[</span><span class="n">PGNUM</span><span class="p">(</span><span class="n">va</span><span class="p">)]</span> <span class="o">&amp;</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="p">{</span>
+                <span class="c1">// uvpd指向页目录，uvpt指向页表，页目录是一页，页表有1024页</span>
+                <span class="n">duppage</span><span class="p">(</span><span class="n">envid</span><span class="p">,</span> <span class="n">PGNUM</span><span class="p">(</span><span class="n">va</span><span class="p">));</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+        <span class="c1">// 映射异常堆栈</span>
+        <span class="k">if</span> <span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_alloc</span><span class="p">(</span><span class="n">envid</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">UXSTACKTOP</span> <span class="o">-</span> <span class="n">PGSIZE</span><span class="p">),</span> <span class="n">PTE_U</span> <span class="o">|</span> <span class="n">PTE_W</span> <span class="o">|</span> <span class="n">PTE_P</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">extern</span> <span class="kt">void</span> <span class="n">_pgfault_upcall</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">((</span><span class="n">r</span> <span class="o">=</span> <span class="n">sys_env_set_pgfault_upcall</span><span class="p">(</span><span class="n">envid</span><span class="p">,</span> <span class="n">_pgfault_upcall</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="n">sys_env_set_status</span><span class="p">(</span><span class="n">envid</span><span class="p">,</span> <span class="n">ENV_RUNNABLE</span><span class="p">);</span>
+
+        <span class="k">return</span> <span class="n">envid</span><span class="p">;</span>
+    <span class="p">}</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>到这里可以通过Part B的测试了</p>
+
+<h2 id="part-c-抢占式多任务和进程间通信ipc">Part C: 抢占式多任务和进程间通信（IPC）</h2>
+
+<h3 id="时钟中断和抢占">时钟中断和抢占</h3>
+
+<p>运行<code class="language-plaintext highlighter-rouge">user/spin</code>测试程序。该测试程序产生一个子环境中，该子环境一旦收到CPU的控制，就会一直执行循环。父进程和内核都不会重新获得CPU。就保护系统免受用户模式环境中的错误或恶意代码的影响而言，这显然不是理想的情况，因为任何用户模式环境都可以通过进入无限循环而永远不放弃CPU，从而使整个系统停机。为了允许内核抢占正在运行的环境，并从中强行夺回CPU的控制权，我们必须扩展JOS内核以支持时钟硬件的外部硬件中断。</p>
+
+<h4 id="interrupt-discipline">Interrupt discipline</h4>
+
+<p>外部中断（即设备中断）称为<code class="language-plaintext highlighter-rouge">IRQ</code>。有16个可能的IRQ，编号为0到15。从IRQ编号到IDT条目的映射不是固定的。 <code class="language-plaintext highlighter-rouge">picirq.c</code>中的<code class="language-plaintext highlighter-rouge">pic_init</code>将IRQ 0-15映射到IDT条目<code class="language-plaintext highlighter-rouge">IRQ_OFFSET</code>至<code class="language-plaintext highlighter-rouge">IRQ_OFFSET + 15</code>。</p>
+
+<p>在<code class="language-plaintext highlighter-rouge">inc/trap.h</code>中，<code class="language-plaintext highlighter-rouge">IRQ_OFFSET</code>定义为十进制32。因此IDT条目32-47对应于IRQ 0-15。例如，时钟中断为IRQ0。因此，IDT [IRQ_OFFSET + 0]（即IDT [32]）包含内核中时钟中断处理程序例程的地址。选择此<code class="language-plaintext highlighter-rouge">IRQ_OFFSET</code>的目的是使设备中断不会与处理器异常重叠，因为这样显然会引起混乱。（实际上，在运行MS-DOS的PC的早期，<code class="language-plaintext highlighter-rouge">IRQ_OFFSET</code>实际上为零，这确实在处理硬件中断和处理处理器异常之间引起了巨大的混乱！）</p>
+
+<p>与xv6 Unix相比，在JOS中，我们进行了一些简化。当运行在内核中时，始终禁用外部设备中断（与xv6类似，运行在用户空间中时，则启用外部设备中断）。外部中断由<code class="language-plaintext highlighter-rouge">％eflags</code>寄存器的<code class="language-plaintext highlighter-rouge">FL_IF</code>标志位控制（请参见<code class="language-plaintext highlighter-rouge">inc/mmu.h</code>）。当该位置1时，使能外部中断。尽管可以通过多种方式修改该位，但是由于我们的简化，我们仅在进入和退出用户模式时通过保存和恢复％eflags寄存器的过程来处理该位。</p>
+
+<p>你必须确保在用户环境运行时设置了FL_IF标志，以便在中断到达时将其传递给处理器并由你的中断代码进行处理。否则，将屏蔽或忽略中断，直到重新启用中断。我们使用引导加载程序的第一条指令屏蔽了中断，到目前为止，我们还没有解决过重新启用它们的问题。</p>
+
+<h5 id="exercise-13">Exercise 13</h5>
+
+<p>修改<code class="language-plaintext highlighter-rouge">kern/trapentry.S</code>和<code class="language-plaintext highlighter-rouge">kern/trap.c</code>来初始化IDT中的适当条目，并为IRQ 0到15提供处理程序。然后修改<code class="language-plaintext highlighter-rouge">kern/env.c</code>中<code class="language-plaintext highlighter-rouge">env_alloc()</code>中的代码以确保始终保持用户环境在启用中断的情况下运行。</p>
+
+<p>还要取消注释<code class="language-plaintext highlighter-rouge">sched_halt()</code>中的<code class="language-plaintext highlighter-rouge">sti</code>指令，以便空闲的CPU接受中断。</p>
+
+<p>调用硬件中断处理程序时，处理器从不推送错误代码。此时，你可能想重新阅读<a href="https://pdos.csail.mit.edu/6.828/2018/readings/i386/toc.htm">80386 Reference Manual</a>的9.2节或<a href="https://pdos.csail.mit.edu/6.828/2018/readings/ia32/IA32-3A.pdf">IA-32 Intel Architecture Software Developer’s Manual, Volume 3</a>的5.8节。</p>
+
+<p>完成此练习后，如果你使用运行时间很短（例如，旋转）的任何测试程序来运行内核，则应该看到内核打印的陷阱帧。现在在处理器中启用了中断，但是JOS尚未处理它们，因此你应该看到它将每个中断错误地分配给了当前正在运行的用户环境并销毁了它。</p>
+
+<p>trapentry.S代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_0</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_1</span><span class="p">,</span> <span class="mi">33</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_2</span><span class="p">,</span> <span class="mi">34</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_3</span><span class="p">,</span> <span class="mi">35</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_4</span><span class="p">,</span> <span class="mi">36</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_5</span><span class="p">,</span> <span class="mi">37</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_6</span><span class="p">,</span> <span class="mi">38</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_7</span><span class="p">,</span> <span class="mi">39</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_8</span><span class="p">,</span> <span class="mi">40</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_9</span><span class="p">,</span> <span class="mi">41</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_10</span><span class="p">,</span> <span class="mi">42</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_11</span><span class="p">,</span> <span class="mi">43</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_12</span><span class="p">,</span> <span class="mi">44</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_13</span><span class="p">,</span> <span class="mi">45</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_14</span><span class="p">,</span> <span class="mi">46</span><span class="p">)</span>
+<span class="n">TRAPHANDLER_NOEC</span><span class="p">(</span><span class="n">IRQ_15</span><span class="p">,</span> <span class="mi">47</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>trap_init.c代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">// IRQ</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_0</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_1</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_2</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_3</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_4</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_5</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_6</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_7</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_8</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_9</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_10</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_11</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_12</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_13</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_14</span><span class="p">;</span>
+    <span class="k">extern</span> <span class="kt">int</span> <span class="n">IRQ_15</span><span class="p">;</span>
+
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">0</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_0</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">1</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_1</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">2</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_2</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">3</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_3</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">4</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_4</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">5</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_5</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">6</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_6</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">7</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_7</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">8</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_8</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">9</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_9</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">10</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_10</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">11</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_11</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">12</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_12</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">13</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_13</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">14</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_14</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">SETGATE</span><span class="p">(</span><span class="n">idt</span><span class="p">[</span><span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="mi">15</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GD_KT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">IRQ_15</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>env_alloc代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">// Enable interrupts while in user mode.</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="n">e</span><span class="o">-&gt;</span><span class="n">env_tf</span><span class="p">.</span><span class="n">tf_eflags</span> <span class="o">|=</span> <span class="n">FL_IF</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>取消在<code class="language-plaintext highlighter-rouge">kern/shed.c sched_halt()</code>中<code class="language-plaintext highlighter-rouge">sti</code>的注释，开启中断</p>
+
+<p>如果出现下面的错误：</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kernel panic on CPU 0 at kern/trap.c:310: assertion failed: <span class="o">!(</span>read_eflags<span class="o">()</span> &amp; FL_IF<span class="o">)</span>
+</code></pre></div></div>
+
+<p>是因为在注册中断的开启了trap，设置为0就行</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>SETGATE<span class="o">(</span>idt[T_PGFLT], 0, GD_KT, &amp;th_pgflt, 0<span class="o">)</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>注释掉<code class="language-plaintext highlighter-rouge">kern/shed.c shed_halt()</code>的下列部分</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">// Uncomment the following line after completing exercise 13</span>
+    <span class="s">"sti</span><span class="se">\n</span><span class="s">"</span>
+</code></pre></div></div>
+
+<h4 id="处理时钟中断">处理时钟中断</h4>
+
+<p>在<code class="language-plaintext highlighter-rouge">user/spin</code>程序中，子进程首次运行后，它只是循环旋转，内核再也无法收回控制权。我们需要对硬件进行编程以定期生成时钟中断，这将迫使控制权回到内核，在内核中我们可以将控制权切换到其他用户环境。</p>
+
+<p>在<code class="language-plaintext highlighter-rouge">init.c</code>的<code class="language-plaintext highlighter-rouge">i386_init</code>中调用<code class="language-plaintext highlighter-rouge">lapic_init</code>和<code class="language-plaintext highlighter-rouge">pic_init</code>，用来设置时钟和中断控制器产生中断。现在，你需要编写代码来处理这些中断。</p>
+
+<h5 id="exercise-14">Exercise 14</h5>
+
+<p>修改内核的<code class="language-plaintext highlighter-rouge">trap_dispatch()</code>函数，以便在收到时钟中断时调用<code class="language-plaintext highlighter-rouge">sched_yield()</code>来查找并运行不同的环境。</p>
+
+<p>现在，你应该能够通过<code class="language-plaintext highlighter-rouge">user/spin</code>测试：父进程产生子进程，并调用<code class="language-plaintext highlighter-rouge">sys_yield()</code>几次，只有在经过一个时间片后，它们都将重新获得对CPU的控制权，最后终止子进程并优雅终止。</p>
+
+<p>代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="k">if</span> <span class="p">(</span><span class="n">tf</span><span class="o">-&gt;</span><span class="n">tf_trapno</span> <span class="o">==</span> <span class="n">IRQ_OFFSET</span> <span class="o">+</span> <span class="n">IRQ_TIMER</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">lapic_eoi</span><span class="p">();</span>
+        <span class="n">sched_yield</span><span class="p">();</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+</code></pre></div></div>
+
+<p>现在应该能得到<code class="language-plaintext highlighter-rouge">65/80</code></p>
+
+<h3 id="进程间通信ipc">进程间通信（IPC）</h3>
+
+<p>我们一直专注于操作系统的隔离方面，使它给人的感觉是每个程序都拥有一台机器。操作系统的另一个重要服务是允许程序在需要时相互通信。让程序与其他程序交互可能会更加强大。Unix管道模型是典型示例。</p>
+
+<p>进程间通信的模型很多。即使在今天，仍然存在关于哪种模型最好的争论。我们不会参加这场辩论。相反，我们将尝试实现一个简单的IPC机制。</p>
+
+<h4 id="jos中的ipc">JOS中的IPC</h4>
+
+<p>你将为JOS内核实现一些其他的系统调用，这些调用共同提供了一种简单的进程间通信机制。你将实现两个系统调用<code class="language-plaintext highlighter-rouge">sys_ipc_recv</code>和<code class="language-plaintext highlighter-rouge">sys_ipc_try_send</code>。然后，你将实现两个库包装器<code class="language-plaintext highlighter-rouge">ipc_recv</code>和<code class="language-plaintext highlighter-rouge">ipc_send</code>。</p>
+
+<p>用户环境可以使用JOS的IPC机制相互发送的<code class="language-plaintext highlighter-rouge">消息</code>，这个机制由两个组件组成：单个32位值和可选的单个页面映射。允许环境在消息中传递页面映射可以提供一种有效的方式来传输比单个32位整数所容纳的数据更多的数据，并且还允许环境轻松地设置共享内存。</p>
+
+<h4 id="发送和接收消息">发送和接收消息</h4>
+
+<p>环境调用<code class="language-plaintext highlighter-rouge">sys_ipc_recv</code>接收消息。此系统调用将对当前环境进行调度，并且在消息被收到之前不会再次运行它。当环境正在等待接收消息时，任何其他环境都可以向其发送消息-不仅是特定环境，而且不仅仅是与接收环境具有父子关系的环境。换句话说，你在A部分中实现的权限检查将不适用于IPC，因为IPC系统调用经过了精心设计，因此是<code class="language-plaintext highlighter-rouge">安全的</code>：一个环境不能仅仅通过向其发送消息而导致它发生故障。</p>
+
+<p>环境调用<code class="language-plaintext highlighter-rouge">sys_ipc_try_send</code>根据接收者的环境ID将要发送的值发送给接收者。如果指定的环境实际上正在接收信息（它已调用<code class="language-plaintext highlighter-rouge">sys_ipc_recv</code>但是还没有获得值），则发送消息给发送者，并返回0。否则，返回<code class="language-plaintext highlighter-rouge">-E_IPC_NOT_RECV</code>给发送者以指示目标环境当前不希望接收值。</p>
+
+<p>用户空间中的库函数<code class="language-plaintext highlighter-rouge">ipc_recv</code>将负责调用<code class="language-plaintext highlighter-rouge">sys_ipc_recv</code>，然后在当前环境的结构Env中查找有关接收的信息。</p>
+
+<p>同样，库函数<code class="language-plaintext highlighter-rouge">ipc_send</code>将负责重复调用<code class="language-plaintext highlighter-rouge">sys_ipc_try_send</code>，直到发送成功。</p>
+
+<h4 id="transferring-pages">Transferring Pages</h4>
+
+<p>当环境使用有效的<code class="language-plaintext highlighter-rouge">dstva</code>参数（在<code class="language-plaintext highlighter-rouge">UTOP</code>之下）调用<code class="language-plaintext highlighter-rouge">sys_ipc_recv</code>时，则表明该环境愿意接收页面映射。如果发送方发送一个页面，则该页面应被映射到接收方地址空间中的<code class="language-plaintext highlighter-rouge">dstva</code>。如果接收者已经在<code class="language-plaintext highlighter-rouge">dstva</code>上映射了页面，则该先前映射的页面将被解除映射。</p>
+
+<p>当环境使用有效参数<code class="language-plaintext highlighter-rouge">srcva</code>（位于<code class="language-plaintext highlighter-rouge">UTOP</code>下）调用<code class="language-plaintext highlighter-rouge">sys_ipc_try_send</code>时，这意味着发送方希望将当前映射到<code class="language-plaintext highlighter-rouge">srcva</code>的页面发送给接收方，并具有权限<code class="language-plaintext highlighter-rouge">perm</code>。成功完成IPC之后，发送方将其页面的原始映射保留在其地址空间中的<code class="language-plaintext highlighter-rouge">srcva</code>处，然后接收方将在自己的地址空间中的<code class="language-plaintext highlighter-rouge">dstva</code>处获得此同一物理页面的映射。最后，该页面在发送者和接收者之间共享。</p>
+
+<p>如果发送方或接收方均未指示应传送页面，则不会传送任何页面。在完成任何IPC之后，内核会将接收者的Env结构中的新字段<code class="language-plaintext highlighter-rouge">env_ipc_perm</code>设置为接收到的页面的权限；如果未接收到任何页面，则将其设置为零。</p>
+
+<h4 id="exercise-15">Exercise 15</h4>
+
+<p>在<code class="language-plaintext highlighter-rouge">kern/syscall.c</code>中实现<code class="language-plaintext highlighter-rouge">sys_ipc_recv</code>和<code class="language-plaintext highlighter-rouge">sys_ipc_try_send</code>。在实现它们之前，请先阅读两者的注释，因为它们必须协同工作。在这些例程中调用<code class="language-plaintext highlighter-rouge">envid2env</code>时，应将<code class="language-plaintext highlighter-rouge">checkperm</code>标志设置为0，这意味着允许任何环境将IPC消息发送到任何其他环境，并且内核除了验证目标envid是否有效外，不执行任何特殊权限检查。</p>
+
+<p>然后在<code class="language-plaintext highlighter-rouge">lib/ipc.c</code>中实现<code class="language-plaintext highlighter-rouge">ipc_recv</code>和<code class="language-plaintext highlighter-rouge">ipc_send</code>函数。</p>
+
+<p>使用<code class="language-plaintext highlighter-rouge">user/pingpong</code>和<code class="language-plaintext highlighter-rouge">user/primes</code>函数来测试IPC机制。<code class="language-plaintext highlighter-rouge">user/primes</code>将为每个素数生成一个新环境，直到JOS用尽环境为止。你可以通过阅读<code class="language-plaintext highlighter-rouge">user/primes.c</code>以了解所有的分支和IPC的情况。</p>
+
+<p><code class="language-plaintext highlighter-rouge">kern/syscall.c syscall</code>添加如下代码：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">case</span> <span class="n">SYS_ipc_try_send</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nf">sys_ipc_try_send</span><span class="p">(</span><span class="n">a1</span><span class="p">,</span> <span class="n">a2</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">a3</span><span class="p">,</span> <span class="n">a4</span><span class="p">);</span>
+<span class="k">case</span> <span class="n">SYS_ipc_recv</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nf">sys_ipc_recv</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">a1</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>sys_ipc_recv代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// 阻塞直到值准备就绪。</span>
+<span class="c1">// 使用struct Env的env_ipc_recving和env_ipc_dstva字段记录要接收的内容，将自己标记为不可运行，然后放弃CPU。</span>
+<span class="c1">//</span>
+<span class="c1">// 如果'dstva'小于UTOP，则可以接收数据页面。 “dstva”是发送页面应映射到的虚拟地址。</span>
+<span class="c1">//</span>
+<span class="c1">// 该函数仅在出错时返回，但是系统调用最终将在成功时返回0。</span>
+<span class="c1">// Return &lt; 0 on error.  Errors are:</span>
+<span class="c1">//  -E_INVAL if dstva &lt; UTOP but dstva is not page-aligned.</span>
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">sys_ipc_recv</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">dstva</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="k">if</span> <span class="p">((</span><span class="kt">uintptr_t</span><span class="p">)</span> <span class="n">dstva</span> <span class="o">&lt;</span> <span class="n">UTOP</span> <span class="o">&amp;&amp;</span> <span class="n">PGOFF</span><span class="p">(</span><span class="n">dstva</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">E_INVAL</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">curenv</span><span class="o">-&gt;</span><span class="n">env_ipc_dstva</span> <span class="o">=</span> <span class="n">dstva</span><span class="p">;</span>
+    <span class="n">curenv</span><span class="o">-&gt;</span><span class="n">env_ipc_recving</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+    <span class="n">curenv</span><span class="o">-&gt;</span><span class="n">env_status</span> <span class="o">=</span> <span class="n">ENV_NOT_RUNNABLE</span><span class="p">;</span>
+
+    <span class="n">sys_yield</span><span class="p">();</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// 尝试将`value`发送到目标环境“envid”。</span>
+<span class="c1">// 如果 srcva &lt; UTOP，则将发送当前映射到“srcva”的页面，以便接收者共享同一页面。</span>
+<span class="c1">//</span>
+<span class="c1">// 如果目标未被阻塞，则发送失败，返回值为-E_IPC_NOT_RECV，等待IPC。</span>
+<span class="c1">//</span>
+<span class="c1">// 下面列出的其他原因，发送也会失败。</span>
+<span class="c1">//</span>
+<span class="c1">// 否则，发送将成功，并且目标的ipc字段将更新如下：</span>
+<span class="c1">//    env_ipc_recving设置为0以阻塞接下来的发送；</span>
+<span class="c1">//    env_ipc_from设置为发送对象的envid；</span>
+<span class="c1">//    env_ipc_value设置为参数'value'；</span>
+<span class="c1">//    如果已传输页面，则env_ipc_perm设置为“perm”，否则设置为0。</span>
+<span class="c1">// 目标环境再次标记为可运行，从暂停的sys_ipc_recv系统调用中返回0。 （提示：sys_ipc_recv函数实际上会返回吗？）</span>
+<span class="c1">//</span>
+<span class="c1">// 如果发送方要发送一个页面，但接收方不要求发送页面，则不会传输任何页面映射，并且不会发生错误。</span>
+<span class="c1">// ipc仅在没有错误发生时发生。</span>
+<span class="c1">//</span>
+<span class="c1">// Returns 0 on success, &lt; 0 on error.</span>
+<span class="c1">// Errors are:</span>
+<span class="c1">//  -E_BAD_ENV if environment envid doesn't currently exist.</span>
+<span class="c1">//      (No need to check permissions.)</span>
+<span class="c1">//  -E_IPC_NOT_RECV if envid is not currently blocked in sys_ipc_recv,</span>
+<span class="c1">//      or another environment managed to send first.</span>
+<span class="c1">//  -E_INVAL if srcva &lt; UTOP but srcva is not page-aligned.</span>
+<span class="c1">//  -E_INVAL if srcva &lt; UTOP and perm is inappropriate</span>
+<span class="c1">//      (see sys_page_alloc).</span>
+<span class="c1">//  -E_INVAL if srcva &lt; UTOP but srcva is not mapped in the caller's</span>
+<span class="c1">//      address space.</span>
+<span class="c1">//  -E_INVAL if (perm &amp; PTE_W), but srcva is read-only in the</span>
+<span class="c1">//      current environment's address space.</span>
+<span class="c1">//  -E_NO_MEM if there's not enough memory to map srcva in envid's</span>
+<span class="c1">//      address space.</span>
+<span class="k">static</span> <span class="kt">int</span>
+<span class="nf">sys_ipc_try_send</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">envid</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">value</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">srcva</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="n">perm</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="n">envid_t</span> <span class="n">src_envid</span> <span class="o">=</span> <span class="n">sys_getenvid</span><span class="p">();</span>
+    <span class="k">struct</span> <span class="n">Env</span> <span class="o">*</span><span class="n">dst_e</span><span class="p">;</span>
+    <span class="c1">// -E_BAD_ENV if environment envid doesn't currently exist.</span>
+    <span class="c1">//     (No need to check permissions.)</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">envid2env</span><span class="p">(</span><span class="n">envid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">dst_e</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">E_BAD_ENV</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// -E_IPC_NOT_RECV if envid is not currently blocked in sys_ipc_recv,</span>
+    <span class="c1">//     or another environment managed to send first.</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">dst_e</span><span class="o">-&gt;</span><span class="n">env_ipc_recving</span><span class="p">))</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">E_IPC_NOT_RECV</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">dst_e</span><span class="o">-&gt;</span><span class="n">env_ipc_from</span> <span class="o">=</span> <span class="n">src_envid</span><span class="p">;</span>
+    <span class="n">dst_e</span><span class="o">-&gt;</span><span class="n">env_ipc_value</span> <span class="o">=</span> <span class="n">value</span><span class="p">;</span>
+    <span class="n">dst_e</span><span class="o">-&gt;</span><span class="n">env_ipc_perm</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">((</span><span class="kt">uintptr_t</span><span class="p">)</span><span class="n">srcva</span> <span class="o">&lt;</span> <span class="n">UTOP</span> <span class="o">&amp;&amp;</span> <span class="p">((</span><span class="kt">uintptr_t</span><span class="p">)</span><span class="n">dst_e</span><span class="o">-&gt;</span><span class="n">env_ipc_dstva</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">UTOP</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// sys_page_map可以检查地址是否对齐，也能检查权限</span>
+        <span class="kt">int</span> <span class="n">r</span> <span class="o">=</span> <span class="n">sys_page_map</span><span class="p">(</span><span class="n">src_envid</span><span class="p">,</span> <span class="n">srcva</span><span class="p">,</span> <span class="n">envid</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">dst_e</span><span class="o">-&gt;</span><span class="n">env_ipc_dstva</span><span class="p">,</span> <span class="n">perm</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+        <span class="n">dst_e</span><span class="o">-&gt;</span><span class="n">env_ipc_perm</span> <span class="o">=</span> <span class="n">perm</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">dst_e</span><span class="o">-&gt;</span><span class="n">env_status</span> <span class="o">=</span> <span class="n">ENV_RUNNABLE</span><span class="p">;</span>
+    <span class="c1">// 系统调用的返回值，设置在%eax</span>
+    <span class="n">dst_e</span><span class="o">-&gt;</span><span class="n">env_tf</span><span class="p">.</span><span class="n">tf_regs</span><span class="p">.</span><span class="n">reg_eax</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">dst_e</span><span class="o">-&gt;</span><span class="n">env_ipc_recving</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>ipc_recv代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// 通过IPC接收值并将其返回。</span>
+<span class="c1">// 如果“pg”为非空，则发件人发送的任何页面都将映射到该地址。</span>
+<span class="c1">// 如果“from_env_store”为非空，则将IPC发送方的envid存储在*from_env_store中。</span>
+<span class="c1">// 如果'perm_store'为非null，则将IPC发件人的页面权限存储在*perm_store中</span>
+<span class="c1">//（如果页面已成功传输到'pg'，则此值为非零）。</span>
+<span class="c1">// 如果系统调用失败，则*fromenv和*perm中将存储0（如果它们为非null）并返回错误。</span>
+<span class="c1">// 否则，返回发件人发送的值</span>
+<span class="c1">//</span>
+<span class="c1">// Hint:</span>
+<span class="c1">//   使用“thisenv”发现值和发送者。</span>
+<span class="c1">//   如果'pg'为null，则向sys_ipc_recv传递一个被理解为“no page”的值。</span>
+<span class="c1">//  （0不是正确的值，因为这是映射页面的完全有效的位置。）</span>
+<span class="kt">int32_t</span>
+<span class="nf">ipc_recv</span><span class="p">(</span><span class="n">envid_t</span> <span class="o">*</span><span class="n">from_env_store</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">pg</span><span class="p">,</span> <span class="kt">int</span> <span class="o">*</span><span class="n">perm_store</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="kt">int</span> <span class="n">r</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pg</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">sys_ipc_recv</span><span class="p">(</span><span class="n">pg</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">sys_ipc_recv</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span> <span class="n">UTOP</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// failed</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">from_env_store</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+            <span class="o">*</span><span class="n">from_env_store</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">perm_store</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+            <span class="o">*</span><span class="n">perm_store</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">r</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">from_env_store</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+            <span class="o">*</span><span class="n">from_env_store</span> <span class="o">=</span> <span class="n">thisenv</span><span class="o">-&gt;</span><span class="n">env_ipc_from</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">perm_store</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+            <span class="o">*</span><span class="n">perm_store</span> <span class="o">=</span> <span class="n">thisenv</span><span class="o">-&gt;</span><span class="n">env_ipc_perm</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">thisenv</span><span class="o">-&gt;</span><span class="n">env_ipc_value</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>ipc_send代码如下：</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//将“val”（如果“pg”为非空，则将“pg”与“perm”一起发送）到“toenv”。</span>
+<span class="c1">//此函数一直尝试直到成功。</span>
+<span class="c1">//除-E_IPC_NOT_RECV以外的任何错误均应调用panic()。</span>
+<span class="c1">//</span>
+<span class="c1">// Hint:</span>
+<span class="c1">//   Use sys_yield() to be CPU-friendly.</span>
+<span class="c1">//   If 'pg' is null, pass sys_ipc_try_send a value that it will understand</span>
+<span class="c1">//   as meaning "no page".  (Zero is not the right value.)</span>
+<span class="kt">void</span>
+<span class="nf">ipc_send</span><span class="p">(</span><span class="n">envid_t</span> <span class="n">to_env</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">val</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">pg</span><span class="p">,</span> <span class="kt">int</span> <span class="n">perm</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// LAB 4: Your code here.</span>
+    <span class="kt">int32_t</span> <span class="n">retval</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="n">retval</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="k">if</span><span class="p">(</span><span class="n">pg</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+            <span class="n">retval</span> <span class="o">=</span> <span class="n">sys_ipc_try_send</span><span class="p">(</span><span class="n">to_env</span><span class="p">,</span> <span class="n">val</span><span class="p">,</span> <span class="n">pg</span><span class="p">,</span> <span class="n">perm</span><span class="p">);</span>
+        <span class="k">else</span>
+            <span class="n">retval</span> <span class="o">=</span> <span class="n">sys_ipc_try_send</span><span class="p">(</span><span class="n">to_env</span><span class="p">,</span> <span class="n">val</span><span class="p">,</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span><span class="n">UTOP</span><span class="p">,</span> <span class="n">perm</span><span class="p">);</span>
+
+        <span class="k">if</span><span class="p">(</span><span class="n">retval</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">sys_yield</span><span class="p">();</span>
+        <span class="k">else</span> <span class="k">if</span><span class="p">(</span><span class="n">retval</span> <span class="o">!=</span> <span class="o">-</span><span class="n">E_IPC_NOT_RECV</span><span class="p">)</span>
+            <span class="n">panic</span><span class="p">(</span><span class="s">"Receving wrong return value of sys_ipc_try_send"</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+:ET

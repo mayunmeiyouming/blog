@@ -1,0 +1,62 @@
+I""
+<h3 id="linux-环境安装-mysql">linux 环境安装 mysql</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">sudo </span>apt update
+<span class="nb">sudo </span>apt <span class="nb">install </span>mysql-server
+</code></pre></div></div>
+
+<h3 id="mysql-运程连接">MySql 运程连接</h3>
+
+<h4 id="环境和-mysql-版本">环境和 mysql 版本</h4>
+
+<p>MySql: <code class="language-plaintext highlighter-rouge">mysql  Ver 14.14 Distrib 5.7.26, for Linux (x86_64) using  EditLine wrapper</code></p>
+
+<p>linux: <code class="language-plaintext highlighter-rouge">Ubuntu 18.04.2 LTS</code></p>
+
+<h4 id="第一步">第一步</h4>
+
+<p><code class="language-plaintext highlighter-rouge">grant all privileges on *.* to 'root'@'%' identified by 'password';</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">flush privileges;</code></p>
+
+<ul>
+  <li>
+    <p>第一个* 是数据库名称，可以改成允许访问的数据库名称</p>
+  </li>
+  <li>
+    <p>第二个* 是数据库的表名称(*代表允许访问任意的表和数据库)</p>
+  </li>
+  <li>
+    <p>root代表远程登录使用的用户名，可以自定义</p>
+  </li>
+  <li>
+    <p>% 代表允许任意ip登录，如果你想指定特定的IP，替换掉就可以</p>
+  </li>
+  <li>
+    <p>password 是运程连接密码</p>
+  </li>
+  <li>
+    <p>第二条命令能让上面的命令立即生效</p>
+  </li>
+</ul>
+
+<h4 id="第二步">第二步</h4>
+
+<p>修改<code class="language-plaintext highlighter-rouge">mysql.cnf</code>文件.在<code class="language-plaintext highlighter-rouge">bind-address = 127.0.0.1</code>前面加<code class="language-plaintext highlighter-rouge">#</code></p>
+
+<p>目录: <code class="language-plaintext highlighter-rouge">/etc/mysql/mysql.conf.d/mysqld.cnf</code></p>
+
+<p>命令:</p>
+
+<p><code class="language-plaintext highlighter-rouge">sudo vim /etc/mysql/mysql.conf.d/mysqld.cnf</code></p>
+
+<p>注意:</p>
+
+<p><code class="language-plaintext highlighter-rouge">bind-address = 127.0.0.1</code>可能不在这个文件中,可以通过查找<code class="language-plaintext highlighter-rouge">find /* -name my.cnf</code>,这个文件里可能就有,如果没有,可以查看这个文件包含的路径,如:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">!</span>includedir /etc/mysql/conf.d/
+<span class="o">!</span>includedir /etc/mysql/mysql.conf.d/
+</code></pre></div></div>
+
+<p>这两个路径下面的文件不多,可以一个一个找.</p>
+:ET

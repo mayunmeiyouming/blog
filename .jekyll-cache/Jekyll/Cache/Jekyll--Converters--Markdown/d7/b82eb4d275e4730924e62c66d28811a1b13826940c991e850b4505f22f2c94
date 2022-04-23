@@ -1,0 +1,348 @@
+I"�(<blockquote>
+  <p>本文有改编自简书的一位作者，<a href="https://www.jianshu.com/p/191d1e21f7ed">原作者地址,请点击这里</a></p>
+</blockquote>
+
+<h3 id="一字体">一、字体</h3>
+
+<p>转义字符和其他语言一样使用  \</p>
+
+<p><code class="language-plaintext highlighter-rouge">*倾斜的文字（在文字两边加上一个\*）*</code></p>
+
+<p><em>倾斜的文字（在文字两边加上一个*）</em></p>
+
+<p><code class="language-plaintext highlighter-rouge">*倾斜的文字（在文字两边加上一个\*）*</code></p>
+
+<p><strong>加粗的文字（在文字两边加上两个*)</strong></p>
+
+<p><code class="language-plaintext highlighter-rouge">**加粗的文字（在文字两边加上两个\*)**</code></p>
+
+<p><strong><em>斜体加粗的文字（在文字两边加上三个*)</em></strong></p>
+
+<p><code class="language-plaintext highlighter-rouge">**加粗的文字（在文字两边加上两个\*)**</code></p>
+
+<p><del>这是加删除线的文字</del></p>
+
+<p><code class="language-plaintext highlighter-rouge">~~这是加删除线的文字~~</code></p>
+
+<hr />
+
+<p>换行就是代码空一行就行</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/01.png" alt="" /></p>
+
+<h3 id="二标题">二、标题</h3>
+
+<p>注：标准语法一般在#后跟个空格再写文字</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#一级标题
+
+##二级标题
+
+###三级标题
+
+####四级标题
+
+#####五级标题
+
+######六级标题
+</code></pre></div></div>
+
+<h3 id="三代码标注">三、代码标注</h3>
+
+<p>用tab键开始的一行将被视为代码块</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/02.png" alt="" /></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>&lt;php&gt;
+    echo “hello world";
+&lt;/php&gt;
+</code></pre></div></div>
+
+<p>单行代码使用一个反引号可以标注代码也可以高亮</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/03.png" alt="" /></p>
+
+<p><code class="language-plaintext highlighter-rouge">&lt;php&gt;echo “hello world";&lt;/php&gt;</code></p>
+
+<p>多行代码使用三个反引号将代码包起来，且反引号需单独一行</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/04.png" alt="" /></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>&lt;php&gt;
+    echo “hello world";
+&lt;/php&gt;
+</code></pre></div></div>
+
+<h3 id="四分割线">四、分割线</h3>
+
+<p>可以在一行中用三个以上的星号、减号、底线来建立一个分隔线，同时需要在分隔线的上面空一行</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>***
+
+___
+
+---
+</code></pre></div></div>
+
+<p>如果分割线上方没有空一行，则上方的文字将被解析为标题</p>
+
+<p>实例：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/05.png" alt="" /></p>
+
+<p>效果：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/06.png" alt="" /></p>
+
+<h3 id="五超链接">五、超链接</h3>
+
+<hr />
+
+<h4 id="第一种超链写法">第一种超链写法</h4>
+
+<p>语法：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/07.png" alt="" /></p>
+
+<p>注：title的作用就是，当鼠标移动到超链上面，会出现提示</p>
+
+<p>实例：</p>
+
+<p><code class="language-plaintext highlighter-rouge">[blog](https://mayunmeiyouming.github.io/blog '我的博客')</code></p>
+
+<p>效果：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/08.png" alt="" /></p>
+
+<hr />
+
+<h4 id="第二种超链写法">第二种超链写法</h4>
+
+<p>语法：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/09.png" alt="" /></p>
+
+<p>实例：</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[blog][1]
+
+[1]: http://example.com/ “title”
+</code></pre></div></div>
+
+<p>效果：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/10.png" alt="" /></p>
+
+<hr />
+
+<h4 id="第三种超链写法">第三种超链写法</h4>
+
+<p>语法：</p>
+
+<p>在文中直接引用链接，直接使用尖括号，把链接加入到尖括号中就可以实现</p>
+
+<p>实例：</p>
+
+<p><code class="language-plaintext highlighter-rouge">&lt;http://example.com/&gt;</code></p>
+
+<p>效果：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/11.png" alt="" /></p>
+
+<h3 id="六图片">六、图片</h3>
+
+<p>语法：</p>
+
+<p><code class="language-plaintext highlighter-rouge">![图片下方的文字](链接 '提示（当鼠标移到图片的位置时，会出现）')</code></p>
+
+<p>实例：</p>
+
+<p><code class="language-plaintext highlighter-rouge">![blog](/assets/images/posts/2019-04-06-hello-github/12.png '你好')</code></p>
+
+<p>效果：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/12.png" alt="" /></p>
+
+<h3 id="第七列表">第七、列表</h3>
+
+<hr />
+
+<h4 id="1无序列表">1.无序列表</h4>
+
+<p>语法：</p>
+
+<p>无序列表用 - + * 任何一种都可以</p>
+
+<p>注：符号和内容之间要有空格</p>
+
+<p>实例：</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>- 你好
+
++ 我好
+
+* 大家好
+</code></pre></div></div>
+
+<p>效果：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/13.png" alt="" /></p>
+
+<hr />
+
+<h4 id="2有序列表">2.有序列表</h4>
+
+<p>语法：</p>
+
+<p>数字加点</p>
+
+<p>实例：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/14.png" alt="" /></p>
+
+<p>效果：</p>
+
+<p><img src="/assets/images/posts/2019-04-06-hello-github/15.png" alt="" /></p>
+
+<h3 id="第八表格">第八、表格</h3>
+
+<p>语法：</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>表头|表头|表头
+---|--:|:--:
+内容|内容|内容
+内容|内容|内容
+
+第二行分割表头和内容。
+- 有一个就行，为了对齐，多加了几个
+文字默认居左
+-两边加：表示文字居中
+-右边加：表示文字居右
+注：原生的语法两边都要用 | 包起来，但在jekyll中可以省略
+</code></pre></div></div>
+
+<p>实例：</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>你|我|它
+--|:--:|--:
+fesf|fsef|sfes
+sefheu|fjsef|fse
+</code></pre></div></div>
+
+<p>效果：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>你</th>
+      <th style="text-align: center">我</th>
+      <th style="text-align: right">它</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>fesf</td>
+      <td style="text-align: center">fsef</td>
+      <td style="text-align: right">sfes</td>
+    </tr>
+    <tr>
+      <td>sefheu</td>
+      <td style="text-align: center">fjsef</td>
+      <td style="text-align: right">fse</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="第九引用">第九、引用</h3>
+
+<p>语法：</p>
+
+<p><code class="language-plaintext highlighter-rouge">&gt;你的引用</code></p>
+
+<p>实例：</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>&gt;你好
+&gt;&gt;你好
+&gt;&gt;&gt;你好
+</code></pre></div></div>
+
+<p>效果：</p>
+
+<blockquote>
+  <p>你好</p>
+  <blockquote>
+    <p>你好</p>
+    <blockquote>
+      <p>你好</p>
+    </blockquote>
+  </blockquote>
+</blockquote>
+
+<h3 id="锚">锚</h3>
+
+<h4 id="跳转到锚">跳转到锚</h4>
+
+<p>目录树是根据文档中的h1~h6标题自动生成的。</p>
+
+<p>Markdown会自动给每一个h1~h6标题生成一个锚，其id就是标题内容。目录树中的每一项都是一个跳转链接，点击后就会跳转到其对应的锚点（即标题所在位置）。</p>
+
+<p>如果需要在目录树之外还要增加跳转到某个标题的链接，则有两种办法可以做到：</p>
+
+<ol>
+  <li>
+    <p>使用Markdown的语法来访问跳转链接：<code class="language-plaintext highlighter-rouge">[名称](#id)</code>。</p>
+  </li>
+  <li>
+    <p>使用HTML语法来增加跳转链接：<code class="language-plaintext highlighter-rouge">&lt;a href=”#id”&gt;名称</code></p>
+  </li>
+</ol>
+
+<p>其中的<code class="language-plaintext highlighter-rouge">名称</code>可以随便填写，<code class="language-plaintext highlighter-rouge">id</code>需要填写跳转到的标题的内容。例如如果想要增加一个到本文档<code class="language-plaintext highlighter-rouge">五、超链接</code>标题的跳转链接，则需要这么写：</p>
+
+<p><code class="language-plaintext highlighter-rouge">[五、超链接](#五、超链接)</code></p>
+
+<p>效果：</p>
+
+<p><a href="#五、超链接">五、超链接</a></p>
+
+<p>或者这么写：</p>
+
+<p><code class="language-plaintext highlighter-rouge">&lt;a href="#1"&gt;</code></p>
+
+<p>使用HTML语法增加的跳转到<code class="language-plaintext highlighter-rouge">五、超链接</code>的链接</p>
+
+<p>效果：</p>
+
+<p><a href="#1">链接</a></p>
+
+<h4 id="自定义锚">自定义锚</h4>
+
+<p>跳转到文档中的一个不是标题的位置（比如一张图表），则需要在该位置自定义一个锚。我们使用HTML语法来定义一个锚。可选的HTML标签很多，比如<code class="language-plaintext highlighter-rouge">&lt;span&gt;</code>、<code class="language-plaintext highlighter-rouge">&lt;a&gt;</code>等等。本文使用<code class="language-plaintext highlighter-rouge">&lt;span&gt;</code>示例。</p>
+
+<p>实例：</p>
+
+<p><code class="language-plaintext highlighter-rouge">&lt;span id="1"&gt;链接</code></p>
+
+<p>效果：</p>
+
+<p><span id="1">链接</span></p>
+
+<h3 id="选择框和段落">选择框和段落</h3>
+
+<p>效果：</p>
+
+<ul class="task-list">
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" checked="checked" />选择框
+    <ul class="task-list">
+      <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />段落</li>
+    </ul>
+  </li>
+</ul>
+
+<p>语法：</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>- [x] 选择框
+    - [ ] 段落
+</code></pre></div></div>
+
+<p>VSCode 可以安装 markdownlint 插件</p>
+:ET

@@ -1,0 +1,14 @@
+I"�<h3 id="开机自启动服务">开机自启动服务</h3>
+
+<p><code class="language-plaintext highlighter-rouge">systemd-analyze blame</code> 可以查看开机自启动服务</p>
+
+<p><code class="language-plaintext highlighter-rouge">sudo systemctl disable 服务名</code> 可以关闭相关自启动服务</p>
+
+<p><code class="language-plaintext highlighter-rouge">sudo systemctl start 服务名</code> 开启服务</p>
+
+<h3 id="vaware">vaware</h3>
+
+<p><code class="language-plaintext highlighter-rouge">systemctl disable vmware</code> 关闭服务</p>
+
+<p>记得要打开vmware里面的虚拟机时,要使用命令<code class="language-plaintext highlighter-rouge">systemctl start vmware</code>打开相应服务</p>
+:ET

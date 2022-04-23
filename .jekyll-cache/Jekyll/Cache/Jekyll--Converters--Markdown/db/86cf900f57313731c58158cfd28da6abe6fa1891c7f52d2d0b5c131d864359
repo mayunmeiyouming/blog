@@ -1,0 +1,80 @@
+I"7<blockquote>
+  <p>本文为原创，本人也是个汇编初学者，如果有错误，请欢迎指正</p>
+</blockquote>
+
+<h3 id="readelfelf文件查看">readelf（elf文件查看）</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">-a</span> 
+<span class="nt">--all</span> 显示全部信息,等价于 <span class="nt">-h</span> <span class="nt">-l</span> <span class="nt">-S</span> <span class="nt">-s</span> <span class="nt">-r</span> <span class="nt">-d</span> <span class="nt">-V</span> <span class="nt">-A</span> <span class="nt">-I</span><span class="nb">.</span> 
+
+<span class="nt">-h</span> 
+<span class="nt">--file-header</span> 显示elf文件开始的文件头信息. 
+
+<span class="nt">-l</span> 
+<span class="nt">--program-headers</span>  
+<span class="nt">--segments</span> 显示程序头（段头）信息<span class="o">(</span>如果有的话<span class="o">)</span>。 
+
+<span class="nt">-S</span> 
+<span class="nt">--section-headers</span>  
+<span class="nt">--sections</span> 显示节头信息<span class="o">(</span>如果有的话<span class="o">)</span>。 
+
+<span class="nt">-g</span> 
+<span class="nt">--section-groups</span> 显示节组信息<span class="o">(</span>如果有的话<span class="o">)</span>。 
+
+<span class="nt">-t</span> 
+<span class="nt">--section-details</span> 显示节的详细信息<span class="o">(</span><span class="nt">-S</span>的<span class="o">)</span>。 
+
+<span class="nt">-s</span> 
+<span class="nt">--syms</span>        
+<span class="nt">--symbols</span> 显示符号表段中的项（如果有的话）。 
+
+<span class="nt">-e</span> 
+<span class="nt">--headers</span> 显示全部头信息，等价于: <span class="nt">-h</span> <span class="nt">-l</span> <span class="nt">-S</span> 
+
+<span class="nt">-n</span> 
+<span class="nt">--notes</span> 显示note段（内核注释）的信息。 
+
+<span class="nt">-r</span> 
+<span class="nt">--relocs</span> 显示可重定位段的信息。 
+
+<span class="nt">-u</span> 
+<span class="nt">--unwind</span> 显示unwind段信息。当前只支持IA64 ELF的unwind段信息。 
+
+<span class="nt">-d</span> 
+<span class="nt">--dynamic</span> 显示动态段的信息。 
+
+<span class="nt">-V</span> 
+<span class="nt">--version-info</span> 显示版本段的信息。 
+
+<span class="nt">-A</span> 
+<span class="nt">--arch-specific</span> 显示CPU构架信息。 
+
+<span class="nt">-D</span> 
+<span class="nt">--use-dynamic</span> 使用动态段中的符号表显示符号，而不是使用符号段。 
+
+<span class="nt">-x</span> &lt;number or name&gt; 
+<span class="nt">--hex-dump</span><span class="o">=</span>&lt;number or name&gt; 以16进制方式显示指定段内内容。number指定段表中段的索引,或字符串指定文件中的段名。 
+
+<span class="nt">-w</span><span class="o">[</span>liaprmfFsoR] or 
+<span class="nt">--debug-dump</span><span class="o">[=</span>line,<span class="o">=</span>info,<span class="o">=</span>abbrev,<span class="o">=</span>pubnames,<span class="o">=</span>aranges,<span class="o">=</span>macro,<span class="o">=</span>frames,<span class="o">=</span>frames-interp,<span class="o">=</span>str,<span class="o">=</span>loc,<span class="o">=</span>Ranges] 显示调试段中指定的内容。 
+
+<span class="nt">-I</span> 
+<span class="nt">--histogram</span> 显示符号的时候，显示bucket list长度的柱状图。 
+
+<span class="nt">-v</span> 
+<span class="nt">--version</span> 显示readelf的版本信息。 
+
+<span class="nt">-H</span> 
+<span class="nt">--help</span> 显示readelf所支持的命令行选项。 
+
+<span class="nt">-W</span> 
+<span class="nt">--wide</span> 宽行输出。 
+
+@file 可以将选项集中到一个文件中，然后使用这个@file选项载入。
+
+</code></pre></div></div>
+
+<p>实例：</p>
+
+<p>` readelf -a [.o文件名] `</p>
+:ET

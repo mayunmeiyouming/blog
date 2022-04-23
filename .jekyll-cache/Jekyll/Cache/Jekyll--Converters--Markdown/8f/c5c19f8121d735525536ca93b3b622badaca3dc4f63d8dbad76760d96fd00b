@@ -1,0 +1,59 @@
+I"�<blockquote>
+  <p>xv6文件系统</p>
+</blockquote>
+
+<p>在文件系统环境的地址空间为磁盘的<code class="language-plaintext highlighter-rouge">内存映射</code>保留了固定的3GB区域，从0x10000000（<code class="language-plaintext highlighter-rouge">DISKMAP</code>）到0xD0000000（<code class="language-plaintext highlighter-rouge">DISKMAP + DISKMAX</code>）。这意味着我们的系统将只能使用3GB大小的磁盘。磁盘访问是以扇区为单位，而操作系统是以块为单位访问磁盘。在xv6中，一个块等于8个扇区，我们将相应的虚拟地址转换为扇区号，对磁盘进行读写操作。</p>
+
+<p>首先我们来看看文件系统的流程：</p>
+
+<p><img src="/assets/images/posts/2020-02-02-xv6 file system/01.png" alt="" /></p>
+
+<h2 id="serve_init函数">serve_init函数</h2>
+
+<p>其中<code class="language-plaintext highlighter-rouge">serve_init</code>函数完成的功能比较简单，就是初始化<code class="language-plaintext highlighter-rouge">opentab</code>数组。一共完成了两个赋值：</p>
+
+<ol>
+  <li><code class="language-plaintext highlighter-rouge">opentab[i].o_fileid = i</code>;</li>
+  <li><code class="language-plaintext highlighter-rouge">opentab[i].o_fd = (struct Fd*) va</code>;</li>
+</ol>
+
+<p>其中va的初始地址为<code class="language-plaintext highlighter-rouge">0xD0000000</code>，每次赋值完成后，执行<code class="language-plaintext highlighter-rouge">va += PGSIZE;</code>，PGSIZE是4096，是一页的大小。</p>
+
+<p>一个有1024个opentab，代表文件系统一次只能打开1024个文件。</p>
+
+<h2 id="fs_init函数">fs_init函数</h2>
+
+<p>首先探测磁盘1是否可用，如果可用，就设置静态变量<code class="language-plaintext highlighter-rouge">diskno</code>为1，否则设置为0。接下来执行<code class="language-plaintext highlighter-rouge">bc_init</code>函数，该函数将设置缺页异常处理函数为<code class="language-plaintext highlighter-rouge">bc_pgfault</code>，并且设置超级块<code class="language-plaintext highlighter-rouge">struct super</code>。超级块包含了文件系统的块总数和根目录<code class="language-plaintext highlighter-rouge">struct File s_root;</code>。然后设置超级块<code class="language-plaintext highlighter-rouge">super</code>指向块1，<code class="language-plaintext highlighter-rouge">bitmap</code>指向块2。</p>
+
+<h2 id="serve函数">serve函数</h2>
+
+<p>循环接收文件请求，将文件请求类型存放在<code class="language-plaintext highlighter-rouge">req</code>中，然后根据相应的req，调用相应的函数，进行处理，处理完后将利用内存共享，将文件共享给其它环境。下面是相应的请求类型：</p>
+
+<h3 id="fsreq_open">FSREQ_OPEN</h3>
+
+<p>这是一个打开文件的请求，将调用serve_open函数。下面是函数的流程图：</p>
+
+<p><img src="/assets/images/posts/2020-02-02-xv6 file system/02.png" alt="" /></p>
+
+<p>首先调用函数<code class="language-plaintext highlighter-rouge">open_alloc</code>分配一个<code class="language-plaintext highlighter-rouge">struct OpenFile</code>存放在变量<code class="language-plaintext highlighter-rouge">o</code>中。如果需要创建文件，则调用函数<code class="language-plaintext highlighter-rouge">file_create</code>，该函数将分配一个<code class="language-plaintext highlighter-rouge">struct File</code>。</p>
+
+<p><code class="language-plaintext highlighter-rouge">file_open</code>获取文件的<code class="language-plaintext highlighter-rouge">struct File</code>。</p>
+
+<p><code class="language-plaintext highlighter-rouge">file_truncate</code>将释放文件的一些块，并且重新设置文件的<code class="language-plaintext highlighter-rouge">f_size</code>域。</p>
+
+<p>然后将返回一个<code class="language-plaintext highlighter-rouge">struct Fd</code></p>
+
+<h3 id="fsreq_read">FSREQ_READ</h3>
+
+<p>这是一个文件读取的请求，读取数据将存储在ipc的<code class="language-plaintext highlighter-rouge">readRet</code>域。</p>
+
+<h3 id="fsreq_stat">FSREQ_STAT</h3>
+
+<h3 id="fsreq_flush">FSREQ_FLUSH</h3>
+
+<h3 id="fsreq_write">FSREQ_WRITE</h3>
+
+<h3 id="fsreq_set_size">FSREQ_SET_SIZE</h3>
+
+<h3 id="fsreq_sync">FSREQ_SYNC</h3>
+:ET

@@ -1,0 +1,130 @@
+I"(<h3 id="id选择器">ID选择器</h3>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code># ID值 {
+
+}
+</code></pre></div></div>
+
+<p>例:</p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">#id</span> <span class="p">{</span>
+   <span class="nl">color</span><span class="p">:</span> <span class="no">lightcoral</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="元素选择器">元素选择器</h3>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>元素名称 {
+
+}
+</code></pre></div></div>
+
+<p>例:</p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">#p</span> <span class="p">{</span>
+    <span class="nl">color</span><span class="p">:</span> <span class="no">lightcoral</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="class选择器">class选择器</h3>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>.class名称{
+
+}
+</code></pre></div></div>
+
+<p>例:</p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nc">.myclass</span> <span class="p">{</span>
+    <span class="nl">color</span><span class="p">:</span> <span class="no">lightblue</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="属性选择器">属性选择器</h3>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[属性]{
+
+}
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">[attr = value]</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">[attr ~= value]</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">[attr |= value]</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">[attr ^= value]</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">[attr $= value]</code></p>
+
+<p>例:</p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span><span class="nt">title</span><span class="o">]</span><span class="p">{</span>
+    <span class="nl">color</span><span class="p">:</span> <span class="n">lightgray</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="子元素选择器">子元素选择器</h3>
+
+<p>例1.任意后代元素:</p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">div</span> <span class="nt">span</span> <span class="p">{</span>
+    <span class="nl">color</span><span class="p">:</span> <span class="no">lightblue</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>例2.任意子元素:</p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">B</span> <span class="o">&gt;</span> <span class="nt">E</span> <span class="p">{</span>
+    <span class="nl">color</span><span class="p">:</span> <span class="no">lightblue</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>例3.下一个兄弟元素:</p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">B</span> <span class="o">+</span> <span class="nt">E</span> <span class="p">{</span>
+    <span class="nl">color</span><span class="p">:</span> <span class="no">lightblue</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="伪类">伪类</h3>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">:link</span> <span class="nt">向未被访问的链接添加样式</span>
+<span class="nd">:hover</span> <span class="nt">当鼠标在元素上时</span><span class="o">,</span><span class="nt">向元素添加样式</span>
+<span class="nd">:active</span> <span class="nt">向被激活的元素添加样式</span><span class="o">(</span><span class="nt">鼠标按住时</span><span class="o">)</span>
+<span class="nd">:visited</span> <span class="nt">向已被访问的元素添加样式</span>
+</code></pre></div></div>
+
+<p>例:</p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">a</span><span class="nd">:link</span> <span class="p">{</span>
+    <span class="nl">color</span><span class="p">:</span> <span class="no">lightblue</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>id选择器 &gt; class选择器 &gt; 元素选择器</p>
+
+<p>!important可以修改选择器级别</p>
+
+<h3 id="文本修饰">文本修饰</h3>
+
+<p><code class="language-plaintext highlighter-rouge">text-decoration: none</code>可以设置去掉修饰</p>
+
+<p><code class="language-plaintext highlighter-rouge">text-align</code>设置对齐方式</p>
+
+<p><code class="language-plaintext highlighter-rouge">text-indent</code>设置首行缩进</p>
+
+<h3 id="字体">字体</h3>
+
+<p><code class="language-plaintext highlighter-rouge">font-family</code>设置字体</p>
+
+<h3 id="列表">列表</h3>
+
+<p><code class="language-plaintext highlighter-rouge">list-style</code></p>
+
+<p><code class="language-plaintext highlighter-rouge">list-style-image</code>可以引入图片</p>
+
+<h3 id="表格">表格</h3>
+
+<p><code class="language-plaintext highlighter-rouge">border-collapse</code>设置单边框</p>
+:ET
