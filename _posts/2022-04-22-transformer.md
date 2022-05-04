@@ -70,6 +70,8 @@ tag:
 
 ### decoder
 
+marked self attention
+
 ![]({{ '/assets/images/posts/2022-04-22-transformer/22.png' | prepend: site.baseurl}})
 
 ![]({{ '/assets/images/posts/2022-04-22-transformer/23.png' | prepend: site.baseurl}})
