@@ -49,7 +49,7 @@ tag:
 ![]({{ '/assets/images/posts/2022-04-22-transformer/15.png' | prepend: site.baseurl}})
 
 ## Positional Encoding
-
+hh
 为 self attention 添加位置信息。每个位置都有一个唯一的位置向量 𝑒。
 
 ![]({{ '/assets/images/posts/2022-04-22-transformer/16.png' | prepend: site.baseurl}})
