@@ -64,6 +64,8 @@ tag:
 
 ![]({{ '/assets/images/posts/2022-04-22-transformer/19.png' | prepend: site.baseurl}})
 
+mutli-head attention 的输出往往加上 fully connected
+
 ![]({{ '/assets/images/posts/2022-04-22-transformer/20.png' | prepend: site.baseurl}})
 
 ![]({{ '/assets/images/posts/2022-04-22-transformer/21.png' | prepend: site.baseurl}})
