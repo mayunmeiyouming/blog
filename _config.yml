@@ -2,8 +2,11 @@
 title: 水榭清松
 description: 
 logo: favicon.ico
-url: mayunmeiyouming.github.io/blog/
+url: mayunmeiyouming.github.io/blog
 rss_url: /feed.xml
+
+site:
+  url: mayunmeiyouming.github.io/blog
 
 # Jekyll
 permalink:          /blog/:title/
